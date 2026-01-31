@@ -82,10 +82,11 @@ const Delete = () => {
 
       const list = await selectHistory();
 
-      for await (const item of list) {
+      // 先过滤出需要删除的条目
+      const itemsToDelete = list.filter((item) => {
         const { favorite, createTime } = item;
 
-        if (favorite && !deleteFavorite) continue;
+        if (favorite && !deleteFavorite) return false;
 
         const isBetween = dayjs(createTime).isBetween(
           formatRange[0],
@@ -94,10 +95,11 @@ const Delete = () => {
           "[]",
         );
 
-        if (timeRange === 0 || isBetween) {
-          deleteHistory(item);
-        }
-      }
+        return timeRange === 0 || isBetween;
+      });
+
+      // 并行删除所有条目
+      await Promise.all(itemsToDelete.map((item) => deleteHistory(item)));
 
       toggle();
       message.success(t("preference.history.history.hints.delete_success"));

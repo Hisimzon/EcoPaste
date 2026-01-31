@@ -27,7 +27,7 @@ tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 tauri-plugin-log = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-os = "2"
-tauri-plugin-dialog = "2"   
+tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
@@ -40,6 +40,7 @@ tauri-plugin-fs-pro.workspace = true
 tauri-plugin-eco-window.workspace = true
 tauri-plugin-eco-paste.workspace = true
 tauri-plugin-eco-autostart.workspace = true
+rdev = { git = "https://github.com/Narsil/rdev", features = ["unstable_grab"] }
 
 [target."cfg(target_os = \"macos\")".dependencies]
 tauri-nspanel.workspace = true

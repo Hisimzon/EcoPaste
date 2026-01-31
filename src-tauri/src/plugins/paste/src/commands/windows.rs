@@ -7,7 +7,7 @@ use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt;
 use std::ptr;
 use std::sync::Mutex;
-use tauri::command;
+use tauri::{command, Runtime, WebviewWindow};
 use tauri_plugin_eco_window::MAIN_WINDOW_TITLE;
 use winapi::shared::minwindef::DWORD;
 use winapi::shared::windef::{HWINEVENTHOOK, HWND};
@@ -101,7 +101,7 @@ fn focus_previous_window() {
 
 // 粘贴
 #[command]
-pub async fn paste() {
+pub async fn paste<R: Runtime>(window: WebviewWindow<R>) {
     let mut enigo = Enigo::new(&Settings::default()).unwrap();
 
     focus_previous_window();
@@ -112,4 +112,7 @@ pub async fn paste() {
     // insert 的微软虚拟键码：https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
     enigo.key(Key::Other(0x2D), Click).unwrap();
     enigo.key(Key::Shift, Release).unwrap();
+
+    // 粘贴完成后隐藏窗口
+    let _ = window.hide();
 }

@@ -10,6 +10,7 @@ import { clipboardStore } from "@/stores/clipboard";
 import type { DatabaseSchemaHistory } from "@/types/database";
 import { isColor, isEmail, isURL } from "@/utils/is";
 import { paste } from "./paste";
+import { hideWindow } from "./window";
 
 export const getClipboardTextSubtype = async (value: string) => {
   try {
@@ -67,5 +68,8 @@ export const pasteToClipboard = async (
     await writeToClipboard(data);
   }
 
-  return paste();
+  await paste();
+
+  // 粘贴完成后隐藏窗口
+  hideWindow();
 };

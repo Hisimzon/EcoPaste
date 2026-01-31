@@ -151,6 +151,58 @@ const Main = () => {
     [state.quickPasteKeys],
   );
 
+  // 监听全局快捷键事件（由后端 rdev 全局捕获）
+  useTauriListen<{ code: string }>("dispatch-event", ({ payload }) => {
+    const { code } = payload;
+    const { activeId, eventBus } = state;
+
+    switch (code) {
+      // 空格预览
+      case "Space":
+        return eventBus?.emit({
+          action: LISTEN_KEY.CLIPBOARD_ITEM_PREVIEW,
+          id: activeId,
+        });
+      // 回车粘贴
+      case "Enter": {
+        if (!activeId) return;
+        const data = find(state.list, { id: activeId });
+        if (data) {
+          return pasteToClipboard(data);
+        }
+        return;
+      }
+      // 删除
+      case "Backspace":
+      case "Delete":
+        return eventBus?.emit({
+          action: LISTEN_KEY.CLIPBOARD_ITEM_DELETE,
+          id: activeId,
+        });
+      // 选中上一个
+      case "ArrowUp":
+        return eventBus?.emit({
+          action: LISTEN_KEY.CLIPBOARD_ITEM_SELECT_PREV,
+          id: activeId,
+        });
+      // 选中下一个
+      case "ArrowDown":
+        return eventBus?.emit({
+          action: LISTEN_KEY.CLIPBOARD_ITEM_SELECT_NEXT,
+          id: activeId,
+        });
+      // 搜索框聚焦
+      case "KeyF":
+        return eventBus?.emit({
+          action: "focus-search",
+          id: "",
+        });
+      // 隐藏窗口
+      case "KeyW":
+        return toggleWindowVisible();
+    }
+  });
+
   // useTauriListen("dispatch-event", ({ payload }) => {
   //   // console.log("payload", payload);
   // });

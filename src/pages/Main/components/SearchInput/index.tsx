@@ -1,4 +1,4 @@
-import { useBoolean, useKeyPress } from "ahooks";
+import { useBoolean, useKeyPress, useMount } from "ahooks";
 import type { InputRef } from "antd";
 import { Input } from "antd";
 import {
@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 import UnoIcon from "@/components/UnoIcon";
 import { PRESET_SHORTCUT } from "@/constants";
 import { useTauriFocus } from "@/hooks/useTauriFocus";
+import { useTauriListen } from "@/hooks/useTauriListen";
 import { clipboardStore } from "@/stores/clipboard";
 import { MainContext } from "../..";
 
@@ -63,6 +64,25 @@ const SearchInput: FC<HTMLAttributes<HTMLDivElement>> = (props) => {
       target: inputRef.current?.input,
     },
   );
+
+  // 监听全局输入事件（来自后端 rdev 捕获的按键）
+  useTauriListen<{ key: string }>("input-event", ({ payload }) => {
+    const { key } = payload;
+
+    if (key === "Backspace") {
+      setValue((prev) => (prev ? prev.slice(0, -1) : ""));
+    } else if (key === "Delete") {
+      setValue("");
+    } else {
+      setValue((prev) => (prev || "") + key);
+    }
+  });
+
+  useMount(() => {
+    if (clipboardStore.search.defaultFocus) {
+      inputRef.current?.focus();
+    }
+  });
 
   return (
     <div {...props}>

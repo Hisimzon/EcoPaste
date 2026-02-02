@@ -1,4 +1,4 @@
-use rdev::{grab, Event, EventType, Key};
+use rdev::{grab, listen, Button, Event, EventType, Key};
 use std::{
     sync::atomic::{AtomicBool, Ordering},
     thread::spawn,
@@ -8,6 +8,16 @@ use tauri::{AppHandle, Emitter, WebviewWindow};
 static CTRL_PRESSED: AtomicBool = AtomicBool::new(false);
 static SHIFT_PRESSED: AtomicBool = AtomicBool::new(false);
 static ALT_PRESSED: AtomicBool = AtomicBool::new(false);
+
+#[repr(C)]
+struct POINT {
+    x: i32,
+    y: i32,
+}
+
+extern "system" {
+    fn GetCursorPos(lp_point: *mut POINT) -> i32;
+}
 
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,8 +37,10 @@ pub fn platform(
     main_window: WebviewWindow,
     _preference_window: WebviewWindow,
 ) {
-    let app_handle = app_handle.clone();
+    let app_handle_clone = app_handle.clone();
+    let main_window_clone = main_window.clone();
 
+    // 键盘事件监听（使用 grab 可以拦截按键）
     spawn(move || {
         let callback = move |event: Event| -> Option<Event> {
             match event.event_type {
@@ -46,9 +58,9 @@ pub fn platform(
                         _ => {}
                     }
 
-                    if let Ok(true) = main_window.is_visible() {
+                    if let Ok(true) = main_window_clone.is_visible() {
                         // 拦截快捷键
-                        if handle_hotkey(&app_handle, key) {
+                        if handle_hotkey(&app_handle_clone, key) {
                             return None;
                         }
 
@@ -58,7 +70,7 @@ pub fn platform(
                         let alt = ALT_PRESSED.load(Ordering::Relaxed);
                         if !ctrl && !alt {
                             if let Some(ch) = key_to_char(key, SHIFT_PRESSED.load(Ordering::Relaxed)) {
-                                let _ = app_handle.emit("search-input", SearchInputEvent { char: ch });
+                                let _ = app_handle_clone.emit("search-input", SearchInputEvent { char: ch });
                                 // 拦截按键，避免字符输入到原窗口
                                 return None;
                             }
@@ -90,6 +102,33 @@ pub fn platform(
 
         if let Err(err) = grab(callback) {
             eprintln!("rdev grab error: {:?}", err);
+        }
+    });
+
+    // 鼠标事件监听（使用 listen 监听点击）
+    spawn(move || {
+        let callback = move |event: Event| {
+            if let EventType::ButtonPress(Button::Left) = event.event_type {
+                if let Ok(true) = main_window.is_visible() {
+                    let mut point = POINT { x: 0, y: 0 };
+                    if unsafe { GetCursorPos(&mut point) } != 0 {
+                        if let (Ok(pos), Ok(size)) = (main_window.outer_position(), main_window.outer_size()) {
+                            let win_x = pos.x;
+                            let win_y = pos.y;
+                            let win_r = win_x + size.width as i32;
+                            let win_b = win_y + size.height as i32;
+
+                            if point.x < win_x || point.x > win_r || point.y < win_y || point.y > win_b {
+                                let _ = main_window.hide();
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        if let Err(err) = listen(callback) {
+            eprintln!("rdev listen error: {:?}", err);
         }
     });
 }

@@ -175,6 +175,8 @@ const Main = () => {
       // 删除
       case "Backspace":
       case "Delete":
+        // 如果搜索框有内容，Backspace 由 SearchInput 处理删除字符
+        if (code === "Backspace" && state.search) return;
         return eventBus?.emit({
           action: LISTEN_KEY.CLIPBOARD_ITEM_DELETE,
           id: activeId,
@@ -191,21 +193,11 @@ const Main = () => {
           action: LISTEN_KEY.CLIPBOARD_ITEM_SELECT_NEXT,
           id: activeId,
         });
-      // 搜索框聚焦
-      case "KeyF":
-        return eventBus?.emit({
-          action: "focus-search",
-          id: "",
-        });
       // 隐藏窗口
       case "KeyW":
         return toggleWindowVisible();
     }
   });
-
-  // useTauriListen("dispatch-event", ({ payload }) => {
-  //   // console.log("payload", payload);
-  // });
 
   return (
     <MainContext.Provider

@@ -8,6 +8,8 @@ import type { WindowLabel } from "@/types/plugin";
 import { getCursorMonitor } from "@/utils/monitor";
 
 const COMMAND = {
+  ENTER_SEARCH_MODE: "plugin:eco-window|enter_search_mode",
+  EXIT_SEARCH_MODE: "plugin:eco-window|exit_search_mode",
   HIDE_WINDOW: "plugin:eco-window|hide_window",
   SHOW_TASKBAR_ICON: "plugin:eco-window|show_taskbar_icon",
   SHOW_WINDOW: "plugin:eco-window|show_window",
@@ -98,4 +100,18 @@ export const toggleWindowVisible = async () => {
  */
 export const showTaskbarIcon = (visible = true) => {
   invoke(COMMAND.SHOW_TASKBAR_ICON, { visible });
+};
+
+/**
+ * 进入搜索模式：让主窗口临时获取焦点，支持 IME 输入
+ */
+export const enterSearchMode = () => {
+  invoke(COMMAND.ENTER_SEARCH_MODE);
+};
+
+/**
+ * 退出搜索模式：恢复主窗口不可聚焦，恢复之前的前台窗口
+ */
+export const exitSearchMode = () => {
+  invoke(COMMAND.EXIT_SEARCH_MODE);
 };

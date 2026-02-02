@@ -41,6 +41,14 @@ pub async fn show_taskbar_icon<R: Runtime>(
     let _ = app_handle.set_dock_visibility(visible);
 }
 
+// 进入搜索模式（macOS 暂不需要特殊处理，NSPanel 本身可以接收输入）
+#[command]
+pub async fn enter_search_mode<R: Runtime>(_app_handle: AppHandle<R>, _window: WebviewWindow<R>) {}
+
+// 退出搜索模式（macOS 暂不需要特殊处理）
+#[command]
+pub async fn exit_search_mode<R: Runtime>(_app_handle: AppHandle<R>, _window: WebviewWindow<R>) {}
+
 // 设置 macos 的 ns_panel 的状态
 pub fn set_ns_panel<R: Runtime>(
     app_handle: &AppHandle<R>,

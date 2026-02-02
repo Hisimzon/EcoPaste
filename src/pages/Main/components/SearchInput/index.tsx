@@ -15,6 +15,7 @@ import { PRESET_SHORTCUT } from "@/constants";
 import { useTauriFocus } from "@/hooks/useTauriFocus";
 import { useTauriListen } from "@/hooks/useTauriListen";
 import { clipboardStore } from "@/stores/clipboard";
+import { isWin } from "@/utils/is";
 import { MainContext } from "../..";
 
 const SearchInput: FC<HTMLAttributes<HTMLDivElement>> = (props) => {
@@ -42,17 +43,18 @@ const SearchInput: FC<HTMLAttributes<HTMLDivElement>> = (props) => {
     onFocus() {
       const { search } = clipboardStore;
 
-      // 搜索框默认聚焦
-      if (search.defaultFocus) {
+      // 非 Windows 平台：搜索框默认聚焦
+      if (!isWin && search.defaultFocus) {
         inputRef.current?.focus();
-      } else {
-        inputRef.current?.blur();
       }
     },
   });
 
+  // 非 Windows 平台：快捷键聚焦搜索框
   useKeyPress(PRESET_SHORTCUT.SEARCH, () => {
-    inputRef.current?.focus();
+    if (!isWin) {
+      inputRef.current?.focus();
+    }
   });
 
   useKeyPress(
@@ -65,21 +67,32 @@ const SearchInput: FC<HTMLAttributes<HTMLDivElement>> = (props) => {
     },
   );
 
-  // 监听全局输入事件（来自后端 rdev 捕获的按键）
-  useTauriListen<{ key: string }>("input-event", ({ payload }) => {
-    const { key } = payload;
+  // Windows 平台：通过 rdev 捕获键盘输入
+  useTauriListen<{ code: string }>("dispatch-event", ({ payload }) => {
+    if (!isWin) return;
 
-    if (key === "Backspace") {
-      setValue((prev) => (prev ? prev.slice(0, -1) : ""));
-    } else if (key === "Delete") {
-      setValue("");
-    } else {
-      setValue((prev) => (prev || "") + key);
+    if (payload.code === "Escape") {
+      // Escape 清空搜索框
+      setValue(void 0);
+    } else if (payload.code === "Backspace") {
+      // Backspace 删除搜索框最后一个字符
+      setValue((prev) => {
+        if (!prev || prev.length === 0) return prev;
+        return prev.slice(0, -1) || undefined;
+      });
     }
   });
 
+  // Windows 平台：监听 rdev 捕获的可打印字符
+  useTauriListen<{ char: string }>("search-input", ({ payload }) => {
+    if (!isWin) return;
+
+    setValue((prev) => (prev || "") + payload.char);
+  });
+
   useMount(() => {
-    if (clipboardStore.search.defaultFocus) {
+    // 非 Windows 平台：默认聚焦搜索框
+    if (!isWin && clipboardStore.search.defaultFocus) {
       inputRef.current?.focus();
     }
   });
@@ -96,8 +109,11 @@ const SearchInput: FC<HTMLAttributes<HTMLDivElement>> = (props) => {
         onCompositionStart={setTrue}
         placeholder={t("clipboard.hints.search_placeholder")}
         prefix={<UnoIcon name="i-lucide:search" />}
+        readOnly={isWin}
         ref={inputRef}
         size="small"
+        // Windows 平台禁用输入框交互，通过 rdev 捕获输入
+        style={isWin ? { cursor: "default" } : undefined}
         value={value}
       />
     </div>

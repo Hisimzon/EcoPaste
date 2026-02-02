@@ -23,3 +23,11 @@ pub async fn show_taskbar_icon<R: Runtime>(
 ) {
     let _ = window.set_skip_taskbar(!visible);
 }
+
+// 进入搜索模式（Linux 暂不需要特殊处理）
+#[command]
+pub async fn enter_search_mode<R: Runtime>(_app_handle: AppHandle<R>, _window: WebviewWindow<R>) {}
+
+// 退出搜索模式（Linux 暂不需要特殊处理）
+#[command]
+pub async fn exit_search_mode<R: Runtime>(_app_handle: AppHandle<R>, _window: WebviewWindow<R>) {}

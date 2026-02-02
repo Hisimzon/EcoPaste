@@ -15,6 +15,9 @@ import { globalStore } from "@/stores/global";
 import { isMac } from "@/utils/is";
 import { join } from "@/utils/path";
 
+// 标志：是否有删除确认框正在显示
+let isDeleteModalVisible = false;
+
 interface UseContextMenuProps extends ItemProps {
   handleNext: () => void;
 }
@@ -95,8 +98,14 @@ export const useContextMenu = (props: UseContextMenuProps) => {
     let confirmed = true;
 
     if (clipboardStore.content.deleteConfirm) {
+      // 如果已有确认框正在显示，直接返回
+      if (isDeleteModalVisible) return;
+
+      isDeleteModalVisible = true;
+
       confirmed = await deleteModal.confirm({
         afterClose() {
+          isDeleteModalVisible = false;
           // 关闭确认框后焦点还在，需要手动取消焦点
           (document.activeElement as HTMLElement)?.blur();
         },

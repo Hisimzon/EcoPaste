@@ -18,6 +18,7 @@ import { getClipboardTextSubtype } from "@/plugins/clipboard";
 import { clipboardStore } from "@/stores/clipboard";
 import type { DatabaseSchemaHistory } from "@/types/database";
 import { formatDate } from "@/utils/dayjs";
+import { appendPinyinToSearch } from "@/utils/pinyin";
 
 export const useClipboard = (
   state: State,
@@ -73,6 +74,9 @@ export const useClipboard = (
       if (type === "files") {
         sqlData.value = JSON.stringify(value);
       }
+
+      // 为 search 字段追加拼音索引，支持拼音搜索
+      sqlData.search = appendPinyinToSearch(sqlData.search);
 
       const [matched] = await selectHistory((qb) => {
         const { type, value } = sqlData;

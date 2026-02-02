@@ -1,3 +1,4 @@
+use tauri_plugin_eco_window::INPUT_MODE;
 use rdev::{grab, listen, Button, Event, EventType, Key};
 use std::{
     sync::atomic::{AtomicBool, Ordering},
@@ -59,6 +60,11 @@ pub fn platform(
                     }
 
                     if let Ok(true) = main_window_clone.is_visible() {
+                        // 输入模式时不拦截键盘，让用户可以正常输入（如备注 Modal）
+                        if INPUT_MODE.load(Ordering::Relaxed) {
+                            return Some(event);
+                        }
+
                         // 拦截快捷键
                         if handle_hotkey(&app_handle_clone, key) {
                             return None;

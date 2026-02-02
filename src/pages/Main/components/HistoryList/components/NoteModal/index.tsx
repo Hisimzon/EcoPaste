@@ -11,8 +11,10 @@ import {
 } from "react";
 import { updateHistory } from "@/database/history";
 import { MainContext } from "@/pages/Main";
+import { enterInputMode, exitInputMode } from "@/plugins/window";
 import { clipboardStore } from "@/stores/clipboard";
 import type { DatabaseSchemaHistory } from "@/types/database";
+import { isWin } from "@/utils/is";
 import { generatePinyinIndex } from "@/utils/pinyin";
 
 // 用于分隔原始搜索内容和备注拼音的标记
@@ -82,6 +84,15 @@ const NoteModal = forwardRef<NoteModalRef>((_, ref) => {
   };
 
   const handleAfterOpenChange = (open: boolean) => {
+    // Windows 不抢占焦点模式：Modal 打开时进入输入模式，关闭时退出
+    if (isWin) {
+      if (open) {
+        enterInputMode();
+      } else {
+        exitInputMode();
+      }
+    }
+
     if (!open) return;
 
     inputRef.current?.focus();

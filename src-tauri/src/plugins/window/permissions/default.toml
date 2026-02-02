@@ -2,4 +2,4 @@
 
 [default]
 description = "Default permissions for the plugin"
-permissions = ["allow-show-window", "allow-hide-window", "allow-show-taskbar-icon", "allow-enter-search-mode", "allow-exit-search-mode"]
+permissions = ["allow-show-window", "allow-hide-window", "allow-show-taskbar-icon", "allow-enter-search-mode", "allow-exit-search-mode", "allow-enter-input-mode", "allow-exit-input-mode"]

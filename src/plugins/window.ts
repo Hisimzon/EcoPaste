@@ -8,7 +8,9 @@ import type { WindowLabel } from "@/types/plugin";
 import { getCursorMonitor } from "@/utils/monitor";
 
 const COMMAND = {
+  ENTER_INPUT_MODE: "plugin:eco-window|enter_input_mode",
   ENTER_SEARCH_MODE: "plugin:eco-window|enter_search_mode",
+  EXIT_INPUT_MODE: "plugin:eco-window|exit_input_mode",
   EXIT_SEARCH_MODE: "plugin:eco-window|exit_search_mode",
   HIDE_WINDOW: "plugin:eco-window|hide_window",
   SHOW_TASKBAR_ICON: "plugin:eco-window|show_taskbar_icon",
@@ -114,4 +116,18 @@ export const enterSearchMode = () => {
  */
 export const exitSearchMode = () => {
   invoke(COMMAND.EXIT_SEARCH_MODE);
+};
+
+/**
+ * 进入输入模式：禁用键盘拦截，允许正常输入（用于 Modal 输入框）
+ */
+export const enterInputMode = () => {
+  invoke(COMMAND.ENTER_INPUT_MODE);
+};
+
+/**
+ * 退出输入模式：恢复键盘拦截
+ */
+export const exitInputMode = () => {
+  invoke(COMMAND.EXIT_INPUT_MODE);
 };

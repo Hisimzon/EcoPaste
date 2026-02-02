@@ -15,7 +15,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::hide_window,
             commands::show_taskbar_icon,
             commands::enter_search_mode,
-            commands::exit_search_mode
+            commands::exit_search_mode,
+            commands::enter_input_mode,
+            commands::exit_input_mode
         ])
         .build()
 }

@@ -1,5 +1,5 @@
 import { openPath } from "@tauri-apps/plugin-opener";
-import { Flex } from "antd";
+import { Dropdown, Flex } from "antd";
 import type { HookAPI } from "antd/es/modal/useModal";
 import clsx from "clsx";
 import { type FC, useContext } from "react";
@@ -73,7 +73,7 @@ const Item: FC<ItemProps> = (props) => {
     }
   });
 
-  const { handleContextMenu, ...rest } = useContextMenu({
+  const { getMenuItems, ...rest } = useContextMenu({
     ...props,
     handleNext,
   });
@@ -102,49 +102,58 @@ const Item: FC<ItemProps> = (props) => {
   };
 
   return (
-    <Flex
-      className={clsx(
-        "group b hover:b-primary-5 b-color-2 mx-3 max-h-30 rounded-md p-1.5 transition",
-        {
-          "b-primary bg-primary-1": rootState.activeId === id,
-        },
-      )}
-      gap={4}
-      onClick={() => handleClick("single")}
-      onContextMenu={handleContextMenu}
-      onDoubleClick={() => handleClick("double")}
-      vertical
+    <Dropdown
+      menu={{ items: getMenuItems() }}
+      onOpenChange={(open) => {
+        if (open) {
+          rootState.activeId = id;
+        }
+      }}
+      trigger={["contextMenu"]}
     >
-      <Header {...rest} data={data} handleNote={handleNote} />
+      <Flex
+        className={clsx(
+          "group b hover:b-primary-5 b-color-2 mx-3 max-h-30 rounded-md p-1.5 transition",
+          {
+            "b-primary bg-primary-1": rootState.activeId === id,
+          },
+        )}
+        gap={4}
+        onClick={() => handleClick("single")}
+        onDoubleClick={() => handleClick("double")}
+        vertical
+      >
+        <Header {...rest} data={data} handleNote={handleNote} />
 
-      <div className="relative flex-1 select-auto overflow-hidden break-words children:transition">
-        <div
-          className={clsx(
-            "pointer-events-none absolute inset-0 line-clamp-4 children:inline opacity-0",
-            {
-              "group-hover:opacity-0": content.showOriginalContent,
-              "opacity-100": note,
-            },
-          )}
-        >
-          <UnoIcon
-            className="mr-0.5 translate-y-0.5"
-            name="i-hugeicons:task-edit-01"
-          />
+        <div className="relative flex-1 select-auto overflow-hidden break-words children:transition">
+          <div
+            className={clsx(
+              "pointer-events-none absolute inset-0 line-clamp-4 children:inline opacity-0",
+              {
+                "group-hover:opacity-0": content.showOriginalContent,
+                "opacity-100": note,
+              },
+            )}
+          >
+            <UnoIcon
+              className="mr-0.5 translate-y-0.5"
+              name="i-hugeicons:task-edit-01"
+            />
 
-          <Marker mark={rootState.search}>{note}</Marker>
+            <Marker mark={rootState.search}>{note}</Marker>
+          </div>
+
+          <div
+            className={clsx("h-full", {
+              "group-hover:opacity-100": content.showOriginalContent,
+              "opacity-0": note,
+            })}
+          >
+            {renderContent()}
+          </div>
         </div>
-
-        <div
-          className={clsx("h-full", {
-            "group-hover:opacity-100": content.showOriginalContent,
-            "opacity-0": note,
-          })}
-        >
-          {renderContent()}
-        </div>
-      </div>
-    </Flex>
+      </Flex>
+    </Dropdown>
   );
 };
 

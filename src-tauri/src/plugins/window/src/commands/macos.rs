@@ -49,6 +49,14 @@ pub async fn enter_search_mode<R: Runtime>(_app_handle: AppHandle<R>, _window: W
 #[command]
 pub async fn exit_search_mode<R: Runtime>(_app_handle: AppHandle<R>, _window: WebviewWindow<R>) {}
 
+// 进入输入模式（macOS 暂不需要特殊处理，NSPanel 本身可以接收输入）
+#[command]
+pub async fn enter_input_mode<R: Runtime>(_app_handle: AppHandle<R>, _window: WebviewWindow<R>) {}
+
+// 退出输入模式（macOS 暂不需要特殊处理）
+#[command]
+pub async fn exit_input_mode<R: Runtime>(_app_handle: AppHandle<R>, _window: WebviewWindow<R>) {}
+
 // 设置 macos 的 ns_panel 的状态
 pub fn set_ns_panel<R: Runtime>(
     app_handle: &AppHandle<R>,

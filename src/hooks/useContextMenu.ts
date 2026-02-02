@@ -1,9 +1,9 @@
-import { Menu, MenuItem, type MenuItemOptions } from "@tauri-apps/api/menu";
 import { downloadDir } from "@tauri-apps/api/path";
 import { copyFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
+import type { MenuProps } from "antd";
 import { find, isArray, remove } from "es-toolkit/compat";
-import { type MouseEvent, useContext } from "react";
+import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { useSnapshot } from "valtio";
 import { deleteHistory, updateHistory } from "@/database/history";
@@ -20,10 +20,6 @@ let isDeleteModalVisible = false;
 
 interface UseContextMenuProps extends ItemProps {
   handleNext: () => void;
-}
-
-interface ContextMenuItem extends MenuItemOptions {
-  hide?: boolean;
 }
 
 export const useContextMenu = (props: UseContextMenuProps) => {
@@ -125,82 +121,85 @@ export const useContextMenu = (props: UseContextMenuProps) => {
     deleteHistory(data);
   };
 
-  const handleContextMenu = async (event: MouseEvent) => {
-    event.preventDefault();
-
-    rootState.activeId = id;
-
-    const items: ContextMenuItem[] = [
+  // 构建 Antd Dropdown 菜单项
+  const getMenuItems = (): MenuProps["items"] => {
+    const allItems = [
       {
-        action: () => writeToClipboard(data),
-        text: t("clipboard.button.context_menu.copy"),
+        key: "copy",
+        label: t("clipboard.button.context_menu.copy"),
+        onClick: () => writeToClipboard(data),
       },
       {
-        action: handleNote,
-        text: t("clipboard.button.context_menu.note"),
+        key: "note",
+        label: t("clipboard.button.context_menu.note"),
+        onClick: handleNote,
       },
       {
-        action: pasteAsText,
         hide: type !== "html" && type !== "rtf",
-        text: t("clipboard.button.context_menu.paste_as_plain_text"),
+        key: "paste_as_text",
+        label: t("clipboard.button.context_menu.paste_as_plain_text"),
+        onClick: pasteAsText,
       },
       {
-        action: pasteAsText,
         hide: type !== "files",
-        text: t("clipboard.button.context_menu.paste_as_path"),
+        key: "paste_as_path",
+        label: t("clipboard.button.context_menu.paste_as_path"),
+        onClick: pasteAsText,
       },
       {
-        action: handleFavorite,
-        text: favorite
+        key: "favorite",
+        label: favorite
           ? t("clipboard.button.context_menu.unfavorite")
           : t("clipboard.button.context_menu.favorite"),
+        onClick: handleFavorite,
       },
       {
-        action: openToBrowser,
         hide: subtype !== "url",
-        text: t("clipboard.button.context_menu.open_in_browser"),
+        key: "open_browser",
+        label: t("clipboard.button.context_menu.open_in_browser"),
+        onClick: openToBrowser,
       },
       {
-        action: () => openUrl(`mailto:${value}`),
         hide: subtype !== "email",
-        text: t("clipboard.button.context_menu.send_email"),
+        key: "send_email",
+        label: t("clipboard.button.context_menu.send_email"),
+        onClick: () => openUrl(`mailto:${value}`),
       },
       {
-        action: exportToFile,
         hide: group !== "text",
-        text: t("clipboard.button.context_menu.export_as_file"),
+        key: "export_file",
+        label: t("clipboard.button.context_menu.export_as_file"),
+        onClick: exportToFile,
       },
       {
-        action: downloadImage,
         hide: type !== "image",
-        text: t("clipboard.button.context_menu.download_image"),
+        key: "download_image",
+        label: t("clipboard.button.context_menu.download_image"),
+        onClick: downloadImage,
       },
       {
-        action: openToFinder,
         hide: type !== "files" && subtype !== "path",
-        text: isMac
+        key: "show_in_folder",
+        label: isMac
           ? t("clipboard.button.context_menu.show_in_finder")
           : t("clipboard.button.context_menu.show_in_file_explorer"),
+        onClick: openToFinder,
       },
       {
-        action: handleDelete,
-        text: t("clipboard.button.context_menu.delete"),
+        danger: true,
+        key: "delete",
+        label: t("clipboard.button.context_menu.delete"),
+        onClick: handleDelete,
       },
     ];
 
-    const menu = await Menu.new();
-
-    for await (const item of items.filter(({ hide }) => !hide)) {
-      const menuItem = await MenuItem.new(item);
-
-      await menu.append(menuItem);
-    }
-
-    menu.popup();
+    return allItems
+      .filter((item) => !("hide" in item && item.hide))
+      .map(({ hide, ...item }) => item);
   };
 
   return {
-    handleContextMenu,
+    getMenuItems,
     handleDelete,
     handleFavorite,
   };

@@ -15,10 +15,13 @@ import { enterInputMode, exitInputMode } from "@/plugins/window";
 import { clipboardStore } from "@/stores/clipboard";
 import type { DatabaseSchemaHistory } from "@/types/database";
 import { isWin } from "@/utils/is";
-import { generatePinyinIndex } from "@/utils/pinyin";
+import {
+  generatePinyinIndex,
+  NOTE_PINYIN_MARKER,
+  stripNotePinyinMarker,
+} from "@/utils/pinyin";
 
 // 用于分隔原始搜索内容和备注拼音的标记
-const NOTE_PINYIN_MARKER = "\x1FNOTE\x1F";
 
 export interface NoteModalRef {
   open: (id: string) => void;
@@ -59,7 +62,7 @@ const NoteModal = forwardRef<NoteModalRef>((_, ref) => {
 
       // 构建包含备注拼音的搜索字段
       // 先移除之前的备注拼音部分（如果有）
-      const baseSearch = (search || "").split(NOTE_PINYIN_MARKER)[0].trimEnd();
+      const baseSearch = stripNotePinyinMarker(search).trimEnd();
 
       let newSearch = baseSearch;
       if (note) {

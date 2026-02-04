@@ -9,6 +9,7 @@ import {
 import { clipboardStore } from "@/stores/clipboard";
 import type { DatabaseSchemaHistory } from "@/types/database";
 import { isColor, isEmail, isURL } from "@/utils/is";
+import { stripNotePinyinMarker } from "@/utils/pinyin";
 import { paste } from "./paste";
 import { hideWindow } from "./window";
 
@@ -62,7 +63,7 @@ export const pasteToClipboard = async (
     if (type === "files") {
       await writeText(value.join("\n"));
     } else {
-      await writeText(search);
+      await writeText(stripNotePinyinMarker(search));
     }
   } else {
     await writeToClipboard(data);

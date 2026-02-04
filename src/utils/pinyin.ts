@@ -1,5 +1,17 @@
 import { pinyin } from "pinyin-pro";
 
+export const NOTE_PINYIN_MARKER = "\x1FNOTE\x1F";
+
+export function stripNotePinyinMarker(value: string | undefined): string {
+  if (!value) return "";
+
+  const index = value.indexOf(NOTE_PINYIN_MARKER);
+
+  if (index === -1) return value;
+
+  return value.slice(0, index).trimEnd();
+}
+
 /**
  * 从文本中提取中文并生成拼音索引
  * @param text 原始文本

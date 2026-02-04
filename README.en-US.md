@@ -1,3 +1,4 @@
+This repository is maintained based on the original author's [EcoPaste](https://github.com/EcoPasteHub/EcoPaste) project. As I am not familiar with the Rust language, all bug fixes and feature improvements were completed with AI assistance. All modifications are exclusively targeted at the Windows platform for personal use, have not undergone thorough testing, and stability or compatibility is not guaranteed. Many thanks to the original author for their open-source contribution!
 <a href="https://github.com/EcoPasteHub/EcoPaste">
   <img src="https://socialify.git.ci/EcoPasteHub/EcoPaste/image?description=1&descriptionEditable=Open%20source%20clipboard%20management%20tools%20for%20Windows%2C%20MacOS%20and%20Linux(x11).&font=Source%20Code%20Pro&forks=1&issues=1&logo=https%3A%2F%2Fgithub.com%2FEcoPasteHub%2FEcoPaste%2Fblob%2Fmaster%2Fpublic%2Flogo.png%3Fraw%3Dtrue&name=1&owner=1&pattern=Floating%20Cogs&pulls=1&stargazers=1&theme=Auto" alt="EcoPaste" />
 </a>

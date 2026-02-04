@@ -1,3 +1,5 @@
+本リポジトリは、原作者の [EcoPaste](https://github.com/EcoPasteHub/EcoPaste) プロジェクトをベースにメンテナンスされています。私は Rust 言語に精通していないため、バグ修正および機能改善はすべて AI の支援を受けて実施しました。すべての変更は Windows プラットフォーム向けに個人利用を目的として行われており、十分なテストを経ていないため、安定性および互換性は保証いたしません。オープンソースプロジェクトにご貢献いただいた原作者に深く感謝いたします。
+
 <a href="https://github.com/EcoPasteHub/EcoPaste">
   <img src="https://socialify.git.ci/EcoPasteHub/EcoPaste/image?description=1&descriptionEditable=Windows%E3%80%81MacOS%E3%80%81Linux(x11)%20%E7%94%A8%E3%81%AE%E3%82%AA%E3%83%BC%E3%83%97%E3%83%B3%E3%82%BD%E3%83%BC%E3%82%B9%E3%81%AE%E3%82%AF%E3%83%AA%E3%83%83%E3%83%97%E3%83%9C%E3%83%BC%E3%83%89%E7%AE%A1%E7%90%86%E3%83%84%E3%83%BC%E3%83%AB%E3%80%82&font=Source%20Code%20Pro&forks=1&issues=1&logo=https%3A%2F%2Fgithub.com%2FEcoPasteHub%2FEcoPaste%2Fblob%2Fmaster%2Fpublic%2Flogo.png%3Fraw%3Dtrue&name=1&owner=1&pattern=Floating%20Cogs&pulls=1&stargazers=1&theme=Auto" alt="EcoPaste" />
 </a>

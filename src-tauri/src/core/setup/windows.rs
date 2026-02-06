@@ -1,4 +1,4 @@
-use tauri_plugin_eco_window::INPUT_MODE;
+use tauri_plugin_eco_window::{INPUT_MODE, PINNED};
 use rdev::{grab, listen, Button, Event, EventType, Key};
 use std::{
     sync::atomic::{AtomicBool, Ordering},
@@ -125,7 +125,9 @@ pub fn platform(
                             let win_b = win_y + size.height as i32;
 
                             if point.x < win_x || point.x > win_r || point.y < win_y || point.y > win_b {
-                                let _ = main_window.hide();
+                                if !PINNED.load(Ordering::Relaxed) {
+                                    let _ = main_window.hide();
+                                }
                             }
                         }
                     }

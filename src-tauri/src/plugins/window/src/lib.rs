@@ -17,7 +17,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::enter_search_mode,
             commands::exit_search_mode,
             commands::enter_input_mode,
-            commands::exit_input_mode
+            commands::exit_input_mode,
+            commands::set_pinned
         ])
         .build()
 }

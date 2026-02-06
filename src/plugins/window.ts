@@ -12,6 +12,7 @@ const COMMAND = {
   EXIT_INPUT_MODE: "plugin:eco-window|exit_input_mode",
   EXIT_SEARCH_MODE: "plugin:eco-window|exit_search_mode",
   HIDE_WINDOW: "plugin:eco-window|hide_window",
+  SET_PINNED: "plugin:eco-window|set_pinned",
   SHOW_TASKBAR_ICON: "plugin:eco-window|show_taskbar_icon",
   SHOW_WINDOW: "plugin:eco-window|show_window",
 };
@@ -30,6 +31,10 @@ export const showWindow = (label?: WindowLabel) => {
  */
 export const hideWindow = () => {
   invoke(COMMAND.HIDE_WINDOW);
+};
+
+export const setWindowPinned = (pinned: boolean) => {
+  invoke(COMMAND.SET_PINNED, { pinned });
 };
 
 /**

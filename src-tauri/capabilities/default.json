@@ -44,6 +44,7 @@
     },
     "clipboard-x:default",
     "eco-window:default",
+    "eco-window:allow-set-pinned",
     "eco-paste:default",
     "eco-autostart:default"
   ],

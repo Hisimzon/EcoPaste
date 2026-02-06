@@ -69,6 +69,15 @@ pub async fn enter_input_mode<R: Runtime>(_app_handle: AppHandle<R>, _window: We
 #[command]
 pub async fn exit_input_mode<R: Runtime>(_app_handle: AppHandle<R>, _window: WebviewWindow<R>) {}
 
+//置顶
+#[command]
+pub async fn set_pinned<R: Runtime>(
+    _app_handle: AppHandle<R>,
+    _window: WebviewWindow<R>,
+    _pinned: bool,
+) {
+}
+
 // 设置 macos 的 ns_panel 的状态
 pub fn set_ns_panel<R: Runtime>(
     app_handle: &AppHandle<R>,

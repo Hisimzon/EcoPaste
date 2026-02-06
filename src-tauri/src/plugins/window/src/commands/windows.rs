@@ -7,6 +7,7 @@ pub static SEARCH_MODE: AtomicBool = AtomicBool::new(false);
 
 // 输入模式标志：当为 true 时，不拦截键盘输入（用于 Modal 输入框等场景）
 pub static INPUT_MODE: AtomicBool = AtomicBool::new(false);
+pub static PINNED: AtomicBool = AtomicBool::new(false);
 
 // 显示窗口
 #[command]
@@ -80,4 +81,14 @@ pub async fn show_taskbar_icon<R: Runtime>(
     visible: bool,
 ) {
     let _ = window.set_skip_taskbar(!visible);
+}
+
+//置顶
+#[command]
+pub async fn set_pinned<R: Runtime>(
+    _app_handle: AppHandle<R>,
+    _window: WebviewWindow<R>,
+    pinned: bool,
+) {
+    PINNED.store(pinned, Ordering::Relaxed);
 }

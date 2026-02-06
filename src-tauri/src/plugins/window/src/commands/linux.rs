@@ -51,3 +51,12 @@ pub async fn enter_input_mode<R: Runtime>(_app_handle: AppHandle<R>, _window: We
 // 退出输入模式（Linux 暂不需要特殊处理）
 #[command]
 pub async fn exit_input_mode<R: Runtime>(_app_handle: AppHandle<R>, _window: WebviewWindow<R>) {}
+
+//置顶
+#[command]
+pub async fn set_pinned<R: Runtime>(
+    _app_handle: AppHandle<R>,
+    _window: WebviewWindow<R>,
+    _pinned: bool,
+) {
+}

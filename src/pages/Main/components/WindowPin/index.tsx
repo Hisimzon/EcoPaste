@@ -4,7 +4,7 @@ import { useContext } from "react";
 import UnoIcon from "@/components/UnoIcon";
 import { PRESET_SHORTCUT } from "@/constants";
 import { useTauriFocus } from "@/hooks/useTauriFocus";
-import { hideWindow } from "@/plugins/window";
+import { hideWindow, setWindowPinned } from "@/plugins/window";
 import { MainContext } from "../..";
 
 const WindowPin = () => {
@@ -23,7 +23,10 @@ const WindowPin = () => {
   });
 
   const togglePin = () => {
-    rootState.pinned = !rootState.pinned;
+    const nextPinned = !rootState.pinned;
+
+    rootState.pinned = nextPinned;
+    setWindowPinned(nextPinned);
   };
 
   return (

@@ -1,6 +1,6 @@
 use super::is_main_window;
 use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::{command, AppHandle, Runtime, WebviewWindow};
+use tauri::{command, AppHandle, Manager, Runtime, WebviewWindow};
 
 // 搜索模式标志（保留用于兼容，但 Windows 不抢占焦点模式下不使用）
 pub static SEARCH_MODE: AtomicBool = AtomicBool::new(false);
@@ -10,7 +10,19 @@ pub static INPUT_MODE: AtomicBool = AtomicBool::new(false);
 
 // 显示窗口
 #[command]
-pub async fn show_window<R: Runtime>(_app_handle: AppHandle<R>, window: WebviewWindow<R>) {
+pub async fn show_window<R: Runtime>(
+    app_handle: AppHandle<R>,
+    window: WebviewWindow<R>,
+    label: Option<String>,
+) {
+    let window = if let Some(label) = label {
+        app_handle
+            .get_webview_window(&label)
+            .unwrap_or(window)
+    } else {
+        window
+    };
+
     let _ = window.show();
     let _ = window.unminimize();
 

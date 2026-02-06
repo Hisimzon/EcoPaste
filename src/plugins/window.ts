@@ -1,8 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
-import { emit } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { PhysicalPosition, PhysicalSize } from "@tauri-apps/api/window";
-import { LISTEN_KEY, WINDOW_LABEL } from "@/constants";
+import { WINDOW_LABEL } from "@/constants";
 import { clipboardStore } from "@/stores/clipboard";
 import type { WindowLabel } from "@/types/plugin";
 import { getCursorMonitor } from "@/utils/monitor";
@@ -21,11 +20,9 @@ const COMMAND = {
  * 显示窗口
  */
 export const showWindow = (label?: WindowLabel) => {
-  if (label) {
-    emit(LISTEN_KEY.SHOW_WINDOW, label);
-  } else {
-    invoke(COMMAND.SHOW_WINDOW);
-  }
+  return label
+    ? invoke(COMMAND.SHOW_WINDOW, { label })
+    : invoke(COMMAND.SHOW_WINDOW);
 };
 
 /**

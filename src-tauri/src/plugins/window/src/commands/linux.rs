@@ -1,8 +1,20 @@
-use tauri::{command, AppHandle, Runtime, WebviewWindow};
+use tauri::{command, AppHandle, Manager, Runtime, WebviewWindow};
 
 // 显示窗口
 #[command]
-pub async fn show_window<R: Runtime>(_app_handle: AppHandle<R>, window: WebviewWindow<R>) {
+pub async fn show_window<R: Runtime>(
+    app_handle: AppHandle<R>,
+    window: WebviewWindow<R>,
+    label: Option<String>,
+) {
+    let window = if let Some(label) = label {
+        app_handle
+            .get_webview_window(&label)
+            .unwrap_or(window)
+    } else {
+        window
+    };
+
     let _ = window.show();
     let _ = window.unminimize();
     let _ = window.set_focus();

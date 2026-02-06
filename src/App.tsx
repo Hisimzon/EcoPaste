@@ -1,5 +1,4 @@
 import { HappyProvider } from "@ant-design/happy-work-theme";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { error } from "@tauri-apps/plugin-log";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useBoolean, useEventListener, useKeyPress, useMount } from "ahooks";
@@ -13,7 +12,7 @@ import { useImmediateKey } from "./hooks/useImmediateKey";
 import { useTauriListen } from "./hooks/useTauriListen";
 import { useWindowState } from "./hooks/useWindowState";
 import { getAntdLocale, i18n } from "./locales";
-import { hideWindow, showWindow } from "./plugins/window";
+import { hideWindow } from "./plugins/window";
 import { router } from "./router";
 import { globalStore } from "./stores/global";
 import { generateColorVars } from "./utils/color";
@@ -48,15 +47,6 @@ const App = () => {
     } else {
       document.documentElement.classList.remove("dark");
     }
-  });
-
-  // 监听显示窗口的事件
-  useTauriListen(LISTEN_KEY.SHOW_WINDOW, ({ payload }) => {
-    const appWindow = getCurrentWebviewWindow();
-
-    if (appWindow.label !== payload) return;
-
-    showWindow();
   });
 
   // 监听关闭数据库的事件

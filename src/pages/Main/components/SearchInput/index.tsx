@@ -14,6 +14,7 @@ import UnoIcon from "@/components/UnoIcon";
 import { PRESET_SHORTCUT } from "@/constants";
 import { useTauriFocus } from "@/hooks/useTauriFocus";
 import { useTauriListen } from "@/hooks/useTauriListen";
+import { hideWindow } from "@/plugins/window";
 import { clipboardStore } from "@/stores/clipboard";
 import { isWin } from "@/utils/is";
 import { MainContext } from "../..";
@@ -72,8 +73,8 @@ const SearchInput: FC<HTMLAttributes<HTMLDivElement>> = (props) => {
     if (!isWin) return;
 
     if (payload.code === "Escape") {
-      // Escape 清空搜索框
-      setValue(void 0);
+      hideWindow();
+      return;
     } else if (payload.code === "Backspace") {
       // Backspace 删除搜索框最后一个字符
       setValue((prev) => {

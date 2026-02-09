@@ -1,14 +1,35 @@
-use tauri_plugin_eco_window::{INPUT_MODE, PINNED};
+use tauri_plugin_eco_window::{INPUT_MODE, MAIN_WINDOW_TITLE, PINNED};
 use rdev::{grab, listen, Button, Event, EventType, Key};
 use std::{
     sync::atomic::{AtomicBool, Ordering},
     thread::spawn,
 };
 use tauri::{AppHandle, Emitter, WebviewWindow};
+use winapi::um::winuser::{GetForegroundWindow, GetWindowTextLengthW, GetWindowTextW};
 
 static CTRL_PRESSED: AtomicBool = AtomicBool::new(false);
 static SHIFT_PRESSED: AtomicBool = AtomicBool::new(false);
 static ALT_PRESSED: AtomicBool = AtomicBool::new(false);
+
+fn is_foreground_main_window() -> bool {
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.is_null() {
+            return false;
+        }
+
+        let length = GetWindowTextLengthW(hwnd);
+        if length == 0 {
+            return false;
+        }
+
+        let mut buffer: Vec<u16> = vec![0; (length + 1) as usize];
+        GetWindowTextW(hwnd, buffer.as_mut_ptr(), length + 1);
+
+        let title = String::from_utf16_lossy(&buffer[..length as usize]);
+        title == MAIN_WINDOW_TITLE
+    }
+}
 
 #[repr(C)]
 struct POINT {
@@ -62,6 +83,10 @@ pub fn platform(
                     if let Ok(true) = main_window_clone.is_visible() {
                         // 输入模式时不拦截键盘，让用户可以正常输入（如备注 Modal）
                         if INPUT_MODE.load(Ordering::Relaxed) {
+                            return Some(event);
+                        }
+
+                        if is_foreground_main_window() {
                             return Some(event);
                         }
 

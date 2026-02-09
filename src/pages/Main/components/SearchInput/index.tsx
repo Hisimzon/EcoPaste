@@ -110,11 +110,8 @@ const SearchInput: FC<HTMLAttributes<HTMLDivElement>> = (props) => {
         onCompositionStart={setTrue}
         placeholder={t("clipboard.hints.search_placeholder")}
         prefix={<UnoIcon name="i-lucide:search" />}
-        readOnly={isWin}
         ref={inputRef}
         size="small"
-        // Windows 平台禁用输入框交互，通过 rdev 捕获输入
-        style={isWin ? { cursor: "default" } : undefined}
         value={value}
       />
     </div>

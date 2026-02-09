@@ -46,5 +46,8 @@ rdev = { git = "https://github.com/Narsil/rdev", features = ["unstable_grab"] }
 tauri-nspanel.workspace = true
 rdev = { git = "https://github.com/Narsil/rdev", features = ["unstable_grab"] }
 
+[target."cfg(target_os = \"windows\")".dependencies]
+winapi = { version = ">=0.3, <1", features = ["winuser", "windef"] }
+
 [features]
 cargo-clippy = []

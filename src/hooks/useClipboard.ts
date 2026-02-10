@@ -20,6 +20,8 @@ import type { DatabaseSchemaHistory } from "@/types/database";
 import { formatDate } from "@/utils/dayjs";
 import { appendPinyinToSearch } from "@/utils/pinyin";
 
+let clipboardChangeQueue: Promise<void> = Promise.resolve();
+
 export const useClipboard = (
   state: State,
   options?: ClipboardChangeOptions,
@@ -28,83 +30,89 @@ export const useClipboard = (
     await startListening();
 
     onClipboardChange(async (result) => {
-      const { files, image, html, rtf, text } = result;
+      clipboardChangeQueue = clipboardChangeQueue
+        .catch(() => {})
+        .then(async () => {
+          const { files, image, html, rtf, text } = result;
 
-      if (isEmpty(result) || Object.values(result).every(isEmpty)) return;
+          if (isEmpty(result) || Object.values(result).every(isEmpty)) return;
 
-      const { copyPlain } = clipboardStore.content;
+          const { copyPlain } = clipboardStore.content;
 
-      const data = {
-        createTime: formatDate(),
-        favorite: false,
-        group: "text",
-        id: nanoid(),
-        search: text?.value,
-      } as DatabaseSchemaHistory;
+          const data = {
+            createTime: formatDate(),
+            favorite: false,
+            group: "text",
+            id: nanoid(),
+            search: text?.value,
+          } as DatabaseSchemaHistory;
 
-      if (files) {
-        Object.assign(data, files, {
-          group: "files",
-          search: files.value.join(" "),
+          if (files) {
+            Object.assign(data, files, {
+              group: "files",
+              search: files.value.join(" "),
+            });
+          } else if (html && !copyPlain) {
+            Object.assign(data, html);
+          } else if (rtf && !copyPlain) {
+            Object.assign(data, rtf);
+          } else if (text) {
+            const subtype = await getClipboardTextSubtype(text.value);
+
+            Object.assign(data, text, {
+              subtype,
+            });
+          } else if (image) {
+            Object.assign(data, image, {
+              group: "image",
+            });
+          }
+
+          const sqlData = cloneDeep(data);
+
+          const { type, value, group, createTime } = data;
+
+          if (type === "image") {
+            sqlData.value = await fullName(value);
+          }
+
+          if (type === "files") {
+            sqlData.value = JSON.stringify(value);
+          }
+
+          // 为 search 字段追加拼音索引，支持拼音搜索
+          sqlData.search = appendPinyinToSearch(sqlData.search);
+
+          const [matched] = await selectHistory((qb) => {
+            const { type, value } = sqlData;
+
+            return qb.where("type", "=", type).where("value", "=", value);
+          });
+
+          const visible = state.group === "all" || state.group === group;
+
+          if (matched) {
+            if (!clipboardStore.content.autoSort) return;
+
+            const { id } = matched;
+
+            if (visible) {
+              remove(state.list, { id });
+
+              state.list.unshift({ ...data, id });
+            }
+
+            return updateHistory(id, { createTime });
+          }
+
+          if (visible) {
+            state.list.unshift(data);
+          }
+
+          await insertHistory(sqlData);
         });
-      } else if (html && !copyPlain) {
-        Object.assign(data, html);
-      } else if (rtf && !copyPlain) {
-        Object.assign(data, rtf);
-      } else if (text) {
-        const subtype = await getClipboardTextSubtype(text.value);
 
-        Object.assign(data, text, {
-          subtype,
-        });
-      } else if (image) {
-        Object.assign(data, image, {
-          group: "image",
-        });
-      }
-
-      const sqlData = cloneDeep(data);
-
-      const { type, value, group, createTime } = data;
-
-      if (type === "image") {
-        sqlData.value = await fullName(value);
-      }
-
-      if (type === "files") {
-        sqlData.value = JSON.stringify(value);
-      }
-
-      // 为 search 字段追加拼音索引，支持拼音搜索
-      sqlData.search = appendPinyinToSearch(sqlData.search);
-
-      const [matched] = await selectHistory((qb) => {
-        const { type, value } = sqlData;
-
-        return qb.where("type", "=", type).where("value", "=", value);
-      });
-
-      const visible = state.group === "all" || state.group === group;
-
-      if (matched) {
-        if (!clipboardStore.content.autoSort) return;
-
-        const { id } = matched;
-
-        if (visible) {
-          remove(state.list, { id });
-
-          state.list.unshift({ ...data, id });
-        }
-
-        return updateHistory(id, { createTime });
-      }
-
-      if (visible) {
-        state.list.unshift(data);
-      }
-
-      insertHistory(sqlData);
+      await clipboardChangeQueue;
     }, options);
   });
 };

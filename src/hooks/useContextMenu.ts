@@ -1,7 +1,7 @@
 import { downloadDir } from "@tauri-apps/api/path";
 import { copyFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
-import type { MenuProps } from "antd";
+import { type MenuProps, Modal } from "antd";
 import { find, isArray, remove } from "es-toolkit/compat";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
@@ -17,6 +17,59 @@ import { join } from "@/utils/path";
 
 // 标志：是否有删除确认框正在显示
 let isDeleteModalVisible = false;
+// 当前删除确认框的关闭函数
+let deleteModalCloser: (() => void) | null = null;
+// 当前删除确认框的 Promise 解析函数
+let deleteModalResolver: ((confirmed: boolean) => void) | null = null;
+
+/**
+ * 取消删除确认框（优先关闭自身，避免误隐藏窗口）
+ */
+export const cancelDeleteModal = () => {
+  if (!isDeleteModalVisible) return false;
+
+  // 先触发取消回调，确保上层逻辑感知取消
+  if (deleteModalResolver) {
+    deleteModalResolver(false);
+    deleteModalResolver = null;
+  }
+
+  // 关闭当前确认框，防止对话框残留
+  if (deleteModalCloser) {
+    deleteModalCloser();
+  } else {
+    // 兜底：关闭所有确认框，避免无法退出
+    Modal.destroyAll();
+  }
+
+  return true;
+};
+
+const setDeleteModalCloser = (instance: unknown) => {
+  if (typeof instance === "function") {
+    deleteModalCloser = instance;
+    return;
+  }
+
+  if (instance && typeof instance === "object") {
+    const maybeDestroy = instance as {
+      destroy?: () => void;
+      close?: () => void;
+    };
+
+    if (typeof maybeDestroy.destroy === "function") {
+      deleteModalCloser = () => maybeDestroy.destroy?.();
+      return;
+    }
+
+    if (typeof maybeDestroy.close === "function") {
+      deleteModalCloser = () => maybeDestroy.close?.();
+      return;
+    }
+  }
+
+  deleteModalCloser = null;
+};
 
 interface UseContextMenuProps extends ItemProps {
   handleNext: () => void;
@@ -99,14 +152,29 @@ export const useContextMenu = (props: UseContextMenuProps) => {
 
       isDeleteModalVisible = true;
 
-      confirmed = await deleteModal.confirm({
-        afterClose() {
-          isDeleteModalVisible = false;
-          // 关闭确认框后焦点还在，需要手动取消焦点
-          (document.activeElement as HTMLElement)?.blur();
-        },
-        centered: true,
-        content: t("clipboard.hints.delete_modal_content"),
+      confirmed = await new Promise<boolean>((resolve) => {
+        deleteModalResolver = resolve;
+
+        const modalInstance = deleteModal.confirm({
+          afterClose() {
+            isDeleteModalVisible = false;
+            deleteModalCloser = null;
+            deleteModalResolver = null;
+            // 关闭确认框后焦点还在，需要手动取消焦点
+            (document.activeElement as HTMLElement)?.blur();
+          },
+          centered: true,
+          content: t("clipboard.hints.delete_modal_content"),
+          onCancel() {
+            resolve(false);
+          },
+          onOk() {
+            resolve(true);
+          },
+        });
+
+        // 记录关闭函数，便于外部取消
+        setDeleteModalCloser(modalInstance);
       });
     }
 

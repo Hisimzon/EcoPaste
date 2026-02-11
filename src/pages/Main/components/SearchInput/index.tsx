@@ -12,6 +12,7 @@ import {
 import { useTranslation } from "react-i18next";
 import UnoIcon from "@/components/UnoIcon";
 import { PRESET_SHORTCUT } from "@/constants";
+import { cancelDeleteModal } from "@/hooks/useContextMenu";
 import { useTauriFocus } from "@/hooks/useTauriFocus";
 import { useTauriListen } from "@/hooks/useTauriListen";
 import { hideWindow } from "@/plugins/window";
@@ -73,6 +74,11 @@ const SearchInput: FC<HTMLAttributes<HTMLDivElement>> = (props) => {
     if (!isWin) return;
 
     if (payload.code === "Escape") {
+      // 有删除确认框时优先取消，避免直接隐藏窗口
+      if (cancelDeleteModal()) {
+        return;
+      }
+
       hideWindow();
       return;
     } else if (payload.code === "Backspace") {

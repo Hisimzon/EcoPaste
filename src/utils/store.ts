@@ -14,6 +14,7 @@ import { globalStore } from "@/stores/global";
 import type { Language, Store } from "@/types/store";
 import { deepAssign } from "./object";
 import { getSaveStorePath } from "./path";
+import { normalizeTextThreshold } from "./threshold";
 
 /**
  * 初始化配置项
@@ -29,6 +30,11 @@ const initStore = async () => {
   if (clipboardStore.window.style === "float") {
     clipboardStore.window.style = "standard";
   }
+
+  // 修正大文本阈值，避免越界配置影响性能
+  clipboardStore.content.textThreshold = normalizeTextThreshold(
+    clipboardStore.content.textThreshold,
+  );
 
   await mkdir(globalStore.env.saveDataDir, { recursive: true });
 };
@@ -61,6 +67,10 @@ export const restoreStore = async (backup = false) => {
 
     deepAssign(globalStore, nextGlobalStore);
     deepAssign(clipboardStore, store.clipboardStore);
+    // 修正大文本阈值，避免越界配置影响性能
+    clipboardStore.content.textThreshold = normalizeTextThreshold(
+      clipboardStore.content.textThreshold,
+    );
   }
 
   if (backup) return;

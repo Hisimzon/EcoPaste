@@ -127,7 +127,8 @@
           "delete_confirm": "删除剪貼板內容時彈出確認對話方塊",
           "operation_button": "自定義操作剪貼簿內容的圖示按鈕",
           "paste_as_plain": "富文字和HTML格式在粘貼時僅保留純文字內容",
-          "show_original_content": "添加備註後，滑鼠懸停時是否顯示原內容"
+          "show_original_content": "添加備註後，滑鼠懸停時是否顯示原內容",
+          "text_threshold": "範圍 {{min}}-{{max}}，預設 {{default}}。超過閾值時僅處理前閾值字元以提升效能"
         },
         "label": {
           "auto_favorite": "自動收藏",
@@ -147,7 +148,9 @@
             "paste_plain": "貼上為純文本"
           },
           "paste_as_plain": "粘貼為純文字",
-          "show_original_content": "顯示原內容"
+          "show_original_content": "顯示原內容",
+          "text_threshold": "大文本處理閾值",
+          "text_threshold_unit": "字元"
         },
         "title": "內容設定"
       },

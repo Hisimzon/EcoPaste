@@ -19,6 +19,7 @@ import { clipboardStore } from "@/stores/clipboard";
 import type { DatabaseSchemaHistory } from "@/types/database";
 import { formatDate } from "@/utils/dayjs";
 import { appendPinyinToSearch } from "@/utils/pinyin";
+import { normalizeTextThreshold } from "@/utils/threshold";
 
 let clipboardChangeQueue: Promise<void> = Promise.resolve();
 
@@ -37,7 +38,9 @@ export const useClipboard = (
 
           if (isEmpty(result) || Object.values(result).every(isEmpty)) return;
 
-          const { copyPlain } = clipboardStore.content;
+          const { copyPlain, textThreshold } = clipboardStore.content;
+          // 规范化大文本阈值，避免配置越界
+          const normalizedTextThreshold = normalizeTextThreshold(textThreshold);
 
           const data = {
             createTime: formatDate(),
@@ -81,7 +84,10 @@ export const useClipboard = (
           }
 
           // 为 search 字段追加拼音索引，支持拼音搜索
-          sqlData.search = appendPinyinToSearch(sqlData.search);
+          sqlData.search = appendPinyinToSearch(
+            sqlData.search,
+            normalizedTextThreshold,
+          );
 
           const [matched] = await selectHistory((qb) => {
             const { type, value } = sqlData;

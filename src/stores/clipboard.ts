@@ -1,5 +1,6 @@
 import { proxy } from "valtio";
 import type { ClipboardStore } from "@/types/store";
+import { TEXT_THRESHOLD_DEFAULT } from "@/utils/threshold";
 
 export const clipboardStore = proxy<ClipboardStore>({
   audio: {
@@ -15,6 +16,8 @@ export const clipboardStore = proxy<ClipboardStore>({
     operationButtons: ["copy", "star", "delete"],
     pastePlain: false,
     showOriginalContent: false,
+    // 大文本处理阈值（字符数）
+    textThreshold: TEXT_THRESHOLD_DEFAULT,
   },
 
   history: {

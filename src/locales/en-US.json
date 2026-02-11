@@ -127,7 +127,8 @@
           "delete_confirm": "Pop-up confirmation dialog when deleting clipboard contents",
           "operation_button": "Customize icon buttons to operate on clipboard content",
           "paste_as_plain": "Rich text and HTML formatting retains only plain text content when pasting",
-          "show_original_content": "Whether to display the original content on mouse hover after adding a note"
+          "show_original_content": "Whether to display the original content on mouse hover after adding a note",
+          "text_threshold": "Range {{min}}-{{max}}, default {{default}}. When content exceeds the threshold, only the first threshold chars are processed"
         },
         "label": {
           "auto_favorite": "Auto Favorite",
@@ -147,7 +148,9 @@
             "paste_plain": "Paste as Plain Text"
           },
           "paste_as_plain": "Paste as Plain Text",
-          "show_original_content": "Show Original Content"
+          "show_original_content": "Show Original Content",
+          "text_threshold": "Large Text Threshold",
+          "text_threshold_unit": "chars"
         },
         "title": "Content Settings"
       },

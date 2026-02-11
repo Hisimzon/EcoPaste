@@ -1,8 +1,16 @@
+import { InputNumber } from "antd";
 import { useTranslation } from "react-i18next";
 import { useSnapshot } from "valtio";
 import ProList from "@/components/ProList";
+import ProListItem from "@/components/ProListItem";
 import ProSwitch from "@/components/ProSwitch";
 import { clipboardStore } from "@/stores/clipboard";
+import {
+  normalizeTextThreshold,
+  TEXT_THRESHOLD_DEFAULT,
+  TEXT_THRESHOLD_MAX,
+  TEXT_THRESHOLD_MIN,
+} from "@/utils/threshold";
 import AudioSettings from "./components/AudioSettings";
 import AutoPaste from "./components/AutoPaste";
 import OperationButton from "./components/OperationButton";
@@ -142,6 +150,37 @@ const ClipboardSettings = () => {
           )}
           value={content.showOriginalContent}
         />
+
+        {/* 大文本阈值，限制在合理范围内 */}
+        <ProListItem
+          description={t(
+            "preference.clipboard.content_settings.hints.text_threshold",
+            {
+              default: TEXT_THRESHOLD_DEFAULT,
+              max: TEXT_THRESHOLD_MAX,
+              min: TEXT_THRESHOLD_MIN,
+            },
+          )}
+          title={t(
+            "preference.clipboard.content_settings.label.text_threshold",
+          )}
+        >
+          <InputNumber
+            addonAfter={t(
+              "preference.clipboard.content_settings.label.text_threshold_unit",
+            )}
+            className="w-30"
+            max={TEXT_THRESHOLD_MAX}
+            min={TEXT_THRESHOLD_MIN}
+            onChange={(value) => {
+              clipboardStore.content.textThreshold = normalizeTextThreshold(
+                value ?? TEXT_THRESHOLD_DEFAULT,
+              );
+            }}
+            step={256}
+            value={content.textThreshold}
+          />
+        </ProListItem>
       </ProList>
     </>
   );

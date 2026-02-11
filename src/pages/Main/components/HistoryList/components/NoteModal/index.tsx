@@ -21,6 +21,7 @@ import {
   NOTE_PINYIN_MARKER,
   stripSearchIndex,
 } from "@/utils/pinyin";
+import { normalizeTextThreshold } from "@/utils/threshold";
 
 // 用于分隔原始搜索内容和备注拼音的标记
 
@@ -63,9 +64,16 @@ const NoteModal = forwardRef<NoteModalRef>((_, ref) => {
 
       // 构建包含备注拼音的搜索字段
       // 先移除之前的备注拼音部分（如果有）
-      const baseSearch = stripSearchIndex(search).trimEnd();
+      // 规范化大文本阈值，避免配置越界
+      const normalizedTextThreshold = normalizeTextThreshold(
+        clipboardStore.content.textThreshold,
+      );
+      const baseSearch = stripSearchIndex(
+        search,
+        normalizedTextThreshold,
+      ).trimEnd();
 
-      let newSearch = appendPinyinToSearch(baseSearch);
+      let newSearch = appendPinyinToSearch(baseSearch, normalizedTextThreshold);
       if (note) {
         // 添加备注内容和其拼音到搜索字段
         const notePinyin = generatePinyinIndex(note);

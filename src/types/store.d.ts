@@ -90,6 +90,8 @@ export interface ClipboardStore {
     deleteConfirm: boolean;
     autoSort: boolean;
     showOriginalContent: boolean;
+    // 大文本处理阈值（字符数）
+    textThreshold: number;
   };
 
   // 历史记录

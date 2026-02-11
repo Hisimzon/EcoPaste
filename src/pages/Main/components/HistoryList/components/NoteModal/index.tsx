@@ -16,9 +16,10 @@ import { clipboardStore } from "@/stores/clipboard";
 import type { DatabaseSchemaHistory } from "@/types/database";
 import { isWin } from "@/utils/is";
 import {
+  appendPinyinToSearch,
   generatePinyinIndex,
   NOTE_PINYIN_MARKER,
-  stripNotePinyinMarker,
+  stripSearchIndex,
 } from "@/utils/pinyin";
 
 // 用于分隔原始搜索内容和备注拼音的标记
@@ -62,14 +63,19 @@ const NoteModal = forwardRef<NoteModalRef>((_, ref) => {
 
       // 构建包含备注拼音的搜索字段
       // 先移除之前的备注拼音部分（如果有）
-      const baseSearch = stripNotePinyinMarker(search).trimEnd();
+      const baseSearch = stripSearchIndex(search).trimEnd();
 
-      let newSearch = baseSearch;
+      let newSearch = appendPinyinToSearch(baseSearch);
       if (note) {
         // 添加备注内容和其拼音到搜索字段
         const notePinyin = generatePinyinIndex(note);
         const notePart = notePinyin ? `${note} ${notePinyin}` : note;
-        newSearch = `${baseSearch} ${NOTE_PINYIN_MARKER} ${notePart}`;
+
+        if (newSearch) {
+          newSearch = `${newSearch} ${NOTE_PINYIN_MARKER} ${notePart}`;
+        } else {
+          newSearch = `${NOTE_PINYIN_MARKER} ${notePart}`;
+        }
       }
 
       item.search = newSearch;

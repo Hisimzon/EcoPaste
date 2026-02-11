@@ -94,15 +94,24 @@ export const useClipboard = (
           if (matched) {
             if (!clipboardStore.content.autoSort) return;
 
-            const { id } = matched;
+            const { favorite, id, note, search } = matched;
 
             if (visible) {
               remove(state.list, { id });
 
-              state.list.unshift({ ...data, id });
+              state.list.unshift({
+                ...matched,
+                ...data,
+                favorite,
+                id,
+                note,
+                search,
+              });
             }
 
-            return updateHistory(id, { createTime });
+            await updateHistory(id, { createTime });
+
+            return;
           }
 
           if (visible) {

@@ -9,7 +9,7 @@ import {
 import { clipboardStore } from "@/stores/clipboard";
 import type { DatabaseSchemaHistory } from "@/types/database";
 import { isColor, isEmail, isURL } from "@/utils/is";
-import { stripNotePinyinMarker } from "@/utils/pinyin";
+import { stripSearchIndex } from "@/utils/pinyin";
 import { paste } from "./paste";
 import { hideWindow } from "./window";
 
@@ -37,14 +37,15 @@ export const getClipboardTextSubtype = async (value: string) => {
 
 export const writeToClipboard = (data: DatabaseSchemaHistory) => {
   const { type, value, search } = data;
+  const plainText = stripSearchIndex(search);
 
   switch (type) {
     case "text":
       return writeText(value);
     case "rtf":
-      return writeRTF(search, value);
+      return writeRTF(plainText, value);
     case "html":
-      return writeHTML(search, value);
+      return writeHTML(plainText, value);
     case "image":
       return writeImage(value);
     case "files":
@@ -63,7 +64,7 @@ export const pasteToClipboard = async (
     if (type === "files") {
       await writeText(value.join("\n"));
     } else {
-      await writeText(stripNotePinyinMarker(search));
+      await writeText(stripSearchIndex(search));
     }
   } else {
     await writeToClipboard(data);

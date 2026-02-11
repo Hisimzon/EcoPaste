@@ -1,6 +1,7 @@
 import { pinyin } from "pinyin-pro";
 
 export const NOTE_PINYIN_MARKER = "\x1FNOTE\x1F";
+export const SEARCH_PINYIN_MARKER = "\x1FPINYIN\x1F";
 
 export function stripNotePinyinMarker(value: string | undefined): string {
   if (!value) return "";
@@ -10,6 +11,34 @@ export function stripNotePinyinMarker(value: string | undefined): string {
   if (index === -1) return value;
 
   return value.slice(0, index).trimEnd();
+}
+
+export function stripSearchIndex(value: string | undefined): string {
+  const base = stripNotePinyinMarker(value).trimEnd();
+
+  if (!base) return "";
+
+  const markerIndex = base.indexOf(SEARCH_PINYIN_MARKER);
+
+  if (markerIndex !== -1) {
+    return base.slice(0, markerIndex).trimEnd();
+  }
+
+  const segments = base.split(/\s+/).filter(Boolean);
+
+  if (segments.length < 2) return base;
+
+  for (let i = 1; i < segments.length; i++) {
+    const content = segments.slice(0, i).join(" ");
+    const maybePinyin = segments.slice(i).join(" ");
+    const expected = generatePinyinIndex(content);
+
+    if (expected && maybePinyin === expected) {
+      return content.trimEnd();
+    }
+  }
+
+  return base;
 }
 
 /**
@@ -53,11 +82,13 @@ export function generatePinyinIndex(
  * @returns 合并后的搜索文本（原文 + 拼音）
  */
 export function appendPinyinToSearch(searchText: string | undefined): string {
-  if (!searchText) return "";
+  const baseSearch = stripSearchIndex(searchText).trimEnd();
 
-  const pinyinIndex = generatePinyinIndex(searchText);
+  if (!baseSearch) return "";
 
-  if (!pinyinIndex) return searchText;
+  const pinyinIndex = generatePinyinIndex(baseSearch);
 
-  return `${searchText} ${pinyinIndex}`;
+  if (!pinyinIndex) return baseSearch;
+
+  return `${baseSearch} ${SEARCH_PINYIN_MARKER} ${pinyinIndex}`;
 }

@@ -4,6 +4,8 @@ use core::{prevent_default, setup};
 use tauri::{generate_context, Builder, Manager, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_eco_window::{show_main_window, MAIN_WINDOW_LABEL, PREFERENCE_WINDOW_LABEL};
+#[cfg(target_os = "windows")]
+use tauri_plugin_eco_window::MAIN_WINDOW_VISIBLE;
 use tauri_plugin_log::{Target, TargetKind};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -76,6 +78,11 @@ pub fn run() {
         .on_window_event(|window, event| match event {
             // 让 app 保持在后台运行：https://tauri.app/v1/guides/features/system-tray/#preventing-the-app-from-closing
             WindowEvent::CloseRequested { api, .. } => {
+                #[cfg(target_os = "windows")]
+                if window.label() == MAIN_WINDOW_LABEL {
+                    MAIN_WINDOW_VISIBLE.store(false, std::sync::atomic::Ordering::Relaxed);
+                }
+
                 window.hide().unwrap();
 
                 api.prevent_close();

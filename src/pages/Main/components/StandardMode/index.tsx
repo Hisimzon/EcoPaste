@@ -47,7 +47,9 @@ const StandardMode = () => {
             <UnoIcon
               hoverable
               name="i-lets-icons:setting-alt-line"
-              onClick={() => {
+              onMouseDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
                 showWindow("preference");
               }}
             />

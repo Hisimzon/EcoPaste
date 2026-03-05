@@ -8,6 +8,7 @@ pub static SEARCH_MODE: AtomicBool = AtomicBool::new(false);
 // 输入模式标志：当为 true 时，不拦截键盘输入（用于 Modal 输入框等场景）
 pub static INPUT_MODE: AtomicBool = AtomicBool::new(false);
 pub static PINNED: AtomicBool = AtomicBool::new(false);
+pub static MAIN_WINDOW_VISIBLE: AtomicBool = AtomicBool::new(false);
 
 // 显示窗口
 #[command]
@@ -28,6 +29,7 @@ pub async fn show_window<R: Runtime>(
     let _ = window.unminimize();
 
     if is_main_window(&window) {
+        MAIN_WINDOW_VISIBLE.store(true, Ordering::Relaxed);
         let _ = window.set_focusable(false);
     } else {
         let _ = window.set_focus();
@@ -70,6 +72,10 @@ pub async fn exit_input_mode<R: Runtime>(_app_handle: AppHandle<R>, window: Webv
 // 隐藏窗口
 #[command]
 pub async fn hide_window<R: Runtime>(_app_handle: AppHandle<R>, window: WebviewWindow<R>) {
+    if is_main_window(&window) {
+        MAIN_WINDOW_VISIBLE.store(false, Ordering::Relaxed);
+    }
+
     let _ = window.hide();
 }
 

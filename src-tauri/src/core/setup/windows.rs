@@ -1,4 +1,6 @@
-use tauri_plugin_eco_window::{INPUT_MODE, MAIN_WINDOW_TITLE, PINNED};
+use tauri_plugin_eco_window::{
+    INPUT_MODE, MAIN_WINDOW_TITLE, MAIN_WINDOW_VISIBLE, PINNED,
+};
 use rdev::{grab, listen, Button, Event, EventType, Key};
 use std::{
     sync::atomic::{AtomicBool, Ordering},
@@ -59,8 +61,9 @@ pub fn platform(
     main_window: WebviewWindow,
     _preference_window: WebviewWindow,
 ) {
+    MAIN_WINDOW_VISIBLE.store(main_window.is_visible().unwrap_or(false), Ordering::Relaxed);
+
     let app_handle_clone = app_handle.clone();
-    let main_window_clone = main_window.clone();
 
     // 键盘事件监听（使用 grab 可以拦截按键）
     spawn(move || {
@@ -80,7 +83,7 @@ pub fn platform(
                         _ => {}
                     }
 
-                    if let Ok(true) = main_window_clone.is_visible() {
+                    if MAIN_WINDOW_VISIBLE.load(Ordering::Relaxed) {
                         // 输入模式时不拦截键盘，让用户可以正常输入（如备注 Modal）
                         if INPUT_MODE.load(Ordering::Relaxed) {
                             return Some(event);
@@ -140,7 +143,7 @@ pub fn platform(
     spawn(move || {
         let callback = move |event: Event| {
             if let EventType::ButtonPress(Button::Left) = event.event_type {
-                if let Ok(true) = main_window.is_visible() {
+                if MAIN_WINDOW_VISIBLE.load(Ordering::Relaxed) {
                     let mut point = POINT { x: 0, y: 0 };
                     if unsafe { GetCursorPos(&mut point) } != 0 {
                         if let (Ok(pos), Ok(size)) = (main_window.outer_position(), main_window.outer_size()) {
@@ -151,6 +154,7 @@ pub fn platform(
 
                             if point.x < win_x || point.x > win_r || point.y < win_y || point.y > win_b {
                                 if !PINNED.load(Ordering::Relaxed) {
+                                    MAIN_WINDOW_VISIBLE.store(false, Ordering::Relaxed);
                                     let _ = main_window.hide();
                                 }
                             }

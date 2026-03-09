@@ -108,8 +108,8 @@ pub async fn paste() {
 
     wait(100);
 
-    enigo.key(Key::Shift, Press).unwrap();
-    // insert 的微软虚拟键码：https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
-    enigo.key(Key::Other(0x2D), Click).unwrap();
-    enigo.key(Key::Shift, Release).unwrap();
+    // 某些应用对文件类型仅可靠支持 Ctrl+V，Shift+Insert 可能无效
+    enigo.key(Key::Control, Press).unwrap();
+    enigo.key(Key::Other(0x56), Click).unwrap();
+    enigo.key(Key::Control, Release).unwrap();
 }

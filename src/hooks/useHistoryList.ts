@@ -19,19 +19,24 @@ export const useHistoryList = (options: Options) => {
   const { scrollToTop } = options;
   const { rootState } = useContext(MainContext);
   const state = useReactive({
+    initialized: false,
     loading: false,
     noMore: false,
     page: 1,
+    pendingReload: false,
     size: 20,
   });
 
   const fetchData = async () => {
+    let isFirstPageFetch = false;
+
     try {
       if (state.loading) return;
 
       state.loading = true;
 
       const { page } = state;
+      isFirstPageFetch = page === 1;
 
       const list = await selectHistory((qb) => {
         const { size } = state;
@@ -91,6 +96,16 @@ export const useHistoryList = (options: Options) => {
       rootState.list = unionBy(rootState.list, list, "id");
     } finally {
       state.loading = false;
+
+      if (isFirstPageFetch) {
+        state.initialized = true;
+      }
+
+      if (state.pendingReload) {
+        state.pendingReload = false;
+
+        await fetchData();
+      }
     }
   };
 
@@ -98,11 +113,17 @@ export const useHistoryList = (options: Options) => {
     state.page = 1;
     state.noMore = false;
 
+    if (state.loading) {
+      state.pendingReload = true;
+
+      return;
+    }
+
     return fetchData();
   };
 
   const loadMore = () => {
-    if (state.noMore) return;
+    if (state.noMore || state.loading) return;
 
     state.page += 1;
 
@@ -118,6 +139,7 @@ export const useHistoryList = (options: Options) => {
   }, [rootState.group, rootState.search]);
 
   return {
+    initialized: state.initialized,
     loadMore,
     reload,
   };

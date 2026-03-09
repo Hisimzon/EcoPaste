@@ -17,7 +17,7 @@ import { useTauriFocus } from "@/hooks/useTauriFocus";
 import { useTauriListen } from "@/hooks/useTauriListen";
 import { hideWindow } from "@/plugins/window";
 import { clipboardStore } from "@/stores/clipboard";
-import { isWin } from "@/utils/is";
+import { isBlank, isWin } from "@/utils/is";
 import { MainContext } from "../..";
 
 const SearchInput: FC<HTMLAttributes<HTMLDivElement>> = (props) => {
@@ -30,7 +30,7 @@ const SearchInput: FC<HTMLAttributes<HTMLDivElement>> = (props) => {
   useEffect(() => {
     if (isComposition) return;
 
-    rootState.search = value;
+    rootState.search = isBlank(value) ? void 0 : value;
   }, [value, isComposition]);
 
   useTauriFocus({
@@ -110,7 +110,20 @@ const SearchInput: FC<HTMLAttributes<HTMLDivElement>> = (props) => {
         allowClear
         autoCorrect="off"
         onChange={(event) => {
-          setValue(event.target.value);
+          const nextValue = event.target.value;
+
+          setValue(nextValue || void 0);
+
+          // 兜底：点击 allowClear 时，确保搜索条件立即清空
+          if (!nextValue) {
+            setFalse();
+            rootState.search = void 0;
+          }
+        }}
+        onClear={() => {
+          setFalse();
+          setValue(void 0);
+          rootState.search = void 0;
         }}
         onCompositionEnd={setFalse}
         onCompositionStart={setTrue}

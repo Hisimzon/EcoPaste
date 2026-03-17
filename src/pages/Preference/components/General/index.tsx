@@ -41,6 +41,17 @@ const General = () => {
         />
 
         <ProSwitch
+          description={t(
+            "preference.settings.app_settings.hints.low_resource_mode",
+          )}
+          onChange={(value) => {
+            globalStore.app.lowResourceMode = value;
+          }}
+          title={t("preference.settings.app_settings.label.low_resource_mode")}
+          value={app.lowResourceMode}
+        />
+
+        <ProSwitch
           description={t("preference.settings.app_settings.hints.silent_start")}
           onChange={(value) => {
             globalStore.app.silentStart = value;

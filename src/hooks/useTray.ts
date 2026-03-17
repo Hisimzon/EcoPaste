@@ -13,6 +13,15 @@ import { isMac } from "@/utils/is";
 import { useSubscribeKey } from "./useSubscribeKey";
 
 const TRAY_ID = "app-tray";
+const TRAY_MENU_PREFERENCE_ID = "tray.preference";
+const TRAY_MENU_TOGGLE_LISTEN_ID = "tray.toggle-listen";
+const TRAY_MENU_CHECK_UPDATE_ID = "tray.check-update";
+const TRAY_MENU_OPEN_SOURCE_ID = "tray.open-source";
+const TRAY_MENU_RELAUNCH_ID = "tray.relaunch";
+const TRAY_MENU_EXIT_ID = "tray.exit";
+const ALLOW_APP_EXIT_EVENT = "allow-app-exit";
+
+let creatingTrayPromise: Promise<TrayIcon | void> | null = null;
 
 export const useTray = () => {
   const [startListen, { toggle }] = useBoolean(true);
@@ -47,36 +56,58 @@ export const useTray = () => {
 
   // 创建托盘
   const createTray = async () => {
-    if (!globalStore.app.showMenubarIcon) return;
+    if (creatingTrayPromise) {
+      await creatingTrayPromise;
 
-    const tray = await getTrayById();
+      return;
+    }
 
-    if (tray) return;
+    creatingTrayPromise = (async () => {
+      const tray = await getTrayById();
 
-    const { appName, appVersion } = globalStore.env;
+      if (tray) {
+        tray.setVisible(globalStore.app.showMenubarIcon);
 
-    const menu = await getTrayMenu();
+        const menu = await getTrayMenu();
 
-    const iconPath = isMac ? "assets/tray-mac.ico" : "assets/tray.ico";
-    const icon = await resolveResource(iconPath);
+        tray.setMenu(menu);
 
-    const options: TrayIconOptions = {
-      action: (event) => {
-        if (isMac) return;
+        return tray;
+      }
 
-        if (event.type === "Click" && event.button === "Left") {
-          showWindow("main");
-        }
-      },
-      icon,
-      iconAsTemplate: true,
-      id: TRAY_ID,
-      menu,
-      menuOnLeftClick: isMac,
-      tooltip: `${appName} v${appVersion}`,
-    };
+      if (!globalStore.app.showMenubarIcon) return;
 
-    return TrayIcon.new(options);
+      const { appName, appVersion } = globalStore.env;
+
+      const menu = await getTrayMenu();
+
+      const iconPath = isMac ? "assets/tray-mac.ico" : "assets/tray.ico";
+      const icon = await resolveResource(iconPath);
+
+      const options: TrayIconOptions = {
+        action: (event) => {
+          if (isMac) return;
+
+          if (event.type === "Click" && event.button === "Left") {
+            showWindow("main");
+          }
+        },
+        icon,
+        iconAsTemplate: true,
+        id: TRAY_ID,
+        menu,
+        menuOnLeftClick: isMac,
+        tooltip: `${appName} v${appVersion}`,
+      };
+
+      return TrayIcon.new(options);
+    })();
+
+    try {
+      await creatingTrayPromise;
+    } finally {
+      creatingTrayPromise = null;
+    }
   };
 
   // 获取托盘菜单
@@ -87,10 +118,12 @@ export const useTray = () => {
       MenuItem.new({
         accelerator: isMac ? "Cmd+," : void 0,
         action: () => showWindow("preference"),
+        id: TRAY_MENU_PREFERENCE_ID,
         text: t("component.tray.label.preference"),
       }),
       MenuItem.new({
         action: toggle,
+        id: TRAY_MENU_TOGGLE_LISTEN_ID,
         text: startListen
           ? t("component.tray.label.stop_listening")
           : t("component.tray.label.start_listening"),
@@ -102,10 +135,12 @@ export const useTray = () => {
 
           emit(LISTEN_KEY.UPDATE_APP, true);
         },
+        id: TRAY_MENU_CHECK_UPDATE_ID,
         text: t("component.tray.label.check_update"),
       }),
       MenuItem.new({
         action: () => openUrl(GITHUB_LINK),
+        id: TRAY_MENU_OPEN_SOURCE_ID,
         text: t("component.tray.label.open_source_address"),
       }),
       PredefinedMenuItem.new({ item: "Separator" }),
@@ -114,12 +149,20 @@ export const useTray = () => {
         text: `${t("component.tray.label.version")} ${appVersion}`,
       }),
       MenuItem.new({
-        action: relaunch,
+        action: async () => {
+          await emit(ALLOW_APP_EXIT_EVENT);
+          await relaunch();
+        },
+        id: TRAY_MENU_RELAUNCH_ID,
         text: t("component.tray.label.relaunch"),
       }),
       MenuItem.new({
         accelerator: isMac ? "Cmd+Q" : void 0,
-        action: () => exit(0),
+        action: async () => {
+          await emit(ALLOW_APP_EXIT_EVENT);
+          await exit(0);
+        },
+        id: TRAY_MENU_EXIT_ID,
         text: t("component.tray.label.exit"),
       }),
     ]);

@@ -4,7 +4,7 @@ import { useSnapshot } from "valtio";
 import UnoIcon from "@/components/UnoIcon";
 import { showWindow } from "@/plugins/window";
 import { clipboardStore } from "@/stores/clipboard";
-import { isLinux, isWin } from "@/utils/is";
+import { isLinux } from "@/utils/is";
 import GroupList from "../GroupList";
 import HistoryList from "../HistoryList";
 import SearchInput from "../SearchInput";
@@ -15,23 +15,21 @@ const StandardMode = () => {
 
   return (
     <Flex
-      className={clsx("h-screen bg-color-1 py-3", {
-        "b b-color-1": isLinux,
-        "flex-col-reverse": search.position === "bottom",
-        "rounded-2.5": !isWin,
-      })}
-      data-tauri-drag-region
+      className={clsx(
+        "eco-main-window-shell eco-main-window-enter relative h-screen overflow-hidden rounded-2.5 bg-color-1 py-3",
+        {
+          "b b-color-1": isLinux,
+          "flex-col-reverse": search.position === "bottom",
+        },
+      )}
       gap={12}
       vertical
     >
+      <div className="absolute inset-x-0 top-0 h-3" data-tauri-drag-region />
+
       <SearchInput className="mx-3" />
 
-      <Flex
-        className="flex-1 overflow-hidden"
-        data-tauri-drag-region
-        gap={12}
-        vertical
-      >
+      <Flex className="flex-1 overflow-hidden" gap={12} vertical>
         <Flex
           align="center"
           className="overflow-hidden px-3"

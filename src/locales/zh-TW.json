@@ -262,10 +262,12 @@
     "settings": {
       "app_settings": {
         "hints": {
+          "low_resource_mode": "開啟後會銷毀所有視窗，按剪貼簿快捷鍵時再重建主視窗",
           "silent_start": "手動啟動應用時隱藏視窗"
         },
         "label": {
           "auto_start": "登入時啟動",
+          "low_resource_mode": "低占用模式",
           "show_menubar_icon": "顯示功能表列圖標",
           "show_taskbar_icon": "顯示工作列圖標",
           "silent_start": "靜默啟動"

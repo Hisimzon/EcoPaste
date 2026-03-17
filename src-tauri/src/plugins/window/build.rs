@@ -1,6 +1,9 @@
 const COMMANDS: &[&str] = &[
     "show_window",
     "hide_window",
+    "set_low_resource_mode",
+    "consume_low_resource_clipboard_dirty",
+    "drain_low_resource_clipboard_queue",
     "show_taskbar_icon",
     "enter_search_mode",
     "exit_search_mode",

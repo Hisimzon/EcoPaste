@@ -262,10 +262,12 @@
     "settings": {
       "app_settings": {
         "hints": {
+          "low_resource_mode": "有効にすると全ウィンドウを破棄し、クリップボードのショートカット時にメインウィンドウを再作成します",
           "silent_start": "アプリケーションの手動起動時にウィンドウを隠す"
         },
         "label": {
           "auto_start": "ログイン時に起動",
+          "low_resource_mode": "低リソースモード",
           "show_menubar_icon": "メニューバーアイコンを表示する",
           "show_taskbar_icon": "タスクバーアイコンを表示する",
           "silent_start": "サイレントブート"

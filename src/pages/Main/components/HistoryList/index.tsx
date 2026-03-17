@@ -2,7 +2,7 @@ import { useUpdateEffect } from "ahooks";
 import { FloatButton, Modal } from "antd";
 import clsx from "clsx";
 import { findIndex } from "es-toolkit/compat";
-import { useContext, useEffect, useRef } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import Scrollbar from "@/components/Scrollbar";
 import { LISTEN_KEY } from "@/constants";
@@ -18,7 +18,20 @@ const HistoryList = () => {
   const noteModelRef = useRef<NoteModalRef>(null);
   const [deleteModal, contextHolder] = Modal.useModal();
   const virtuosoRef = useRef<VirtuosoHandle>(null);
-  const scrollerRef = useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLElement | null>(null);
+  const [scrollerElement, setScrollerElement] = useState<HTMLElement | null>(
+    null,
+  );
+
+  const setScrollerNode = (element: HTMLElement | null) => {
+    scrollerRef.current = element;
+
+    setScrollerElement((previous) => {
+      if (previous === element) return previous;
+
+      return element;
+    });
+  };
 
   const scrollToIndex = (index: number) => {
     return virtuosoRef.current?.scrollIntoView({ index });
@@ -34,7 +47,7 @@ const HistoryList = () => {
 
   useKeyboard({ scrollToTop });
 
-  const { reload, loadMore } = useHistoryList({ scrollToTop });
+  const { initialized, reload, loadMore } = useHistoryList({ scrollToTop });
 
   useTauriListen(LISTEN_KEY.ACTIVATE_BACK_TOP, scrollToTop);
 
@@ -60,42 +73,85 @@ const HistoryList = () => {
     scrollToIndex(index);
   }, [rootState.activeId]);
 
+  useEffect(() => {
+    if (rootState.replayInsertedIds.length === 0) return;
+
+    const timeout = window.setTimeout(
+      () => {
+        rootState.replayInsertedIds = [];
+      },
+      Math.min(2400, 450 + rootState.replayInsertedIds.length * 60),
+    );
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [rootState.replayInsertedIds.join("|")]);
+
+  const replayOrderMap = useMemo(() => {
+    return rootState.replayInsertedIds.reduce<Record<string, number>>(
+      (accumulator, id, index) => {
+        accumulator[id] = index;
+
+        return accumulator;
+      },
+      {},
+    );
+  }, [rootState.replayInsertedIds.join("|")]);
+
   return (
     <>
-      <Scrollbar className="flex-1" offsetX={3} ref={scrollerRef}>
-        <Virtuoso
-          atTopStateChange={(atTop) => {
-            if (!atTop || rootState.list.length <= 20) return;
+      {initialized ? (
+        <Scrollbar className="flex-1" offsetX={3} ref={setScrollerNode}>
+          {scrollerElement && (
+            <Virtuoso
+              atTopStateChange={(atTop) => {
+                if (!atTop || rootState.list.length <= 20) return;
 
-            reload();
-          }}
-          computeItemKey={(_, item) => item.id}
-          customScrollParent={scrollerRef.current ?? void 0}
-          data={rootState.list}
-          endReached={loadMore}
-          itemContent={(index, data) => {
-            return (
-              <div className={clsx({ "pt-3": index !== 0 })}>
-                <Item
-                  data={data}
-                  deleteModal={deleteModal}
-                  handleNote={() => noteModelRef.current?.open(data.id)}
-                  index={index}
-                />
-              </div>
-            );
-          }}
-          ref={virtuosoRef}
-        />
-      </Scrollbar>
+                reload();
+              }}
+              computeItemKey={(_, item) => item.id}
+              customScrollParent={scrollerElement}
+              data={rootState.list}
+              endReached={loadMore}
+              itemContent={(index, data) => {
+                const replayOrder = replayOrderMap[data.id];
+
+                return (
+                  <div
+                    className={clsx(
+                      { "pt-3": index !== 0 },
+                      replayOrder !== void 0 && "eco-replay-item-enter",
+                      replayOrder !== void 0 &&
+                        `eco-replay-delay-${Math.min(replayOrder, 10)}`,
+                    )}
+                  >
+                    <Item
+                      data={data}
+                      deleteModal={deleteModal}
+                      handleNote={() => noteModelRef.current?.open(data.id)}
+                      index={index}
+                    />
+                  </div>
+                );
+              }}
+              ref={virtuosoRef}
+            />
+          )}
+        </Scrollbar>
+      ) : (
+        <div className="eco-history-loading-mask mx-3 flex-1 rounded-2 bg-color-2/10" />
+      )}
 
       <NoteModal ref={noteModelRef} />
 
-      <FloatButton.BackTop
-        duration={0}
-        onClick={scrollToTop}
-        target={() => scrollerRef.current!}
-      />
+      {initialized && scrollerElement && (
+        <FloatButton.BackTop
+          duration={0}
+          onClick={scrollToTop}
+          target={() => scrollerRef.current!}
+        />
+      )}
 
       {contextHolder}
     </>

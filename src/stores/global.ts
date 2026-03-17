@@ -4,6 +4,7 @@ import type { GlobalStore } from "@/types/store";
 export const globalStore = proxy<GlobalStore>({
   app: {
     autoStart: false,
+    lowResourceMode: false,
     showMenubarIcon: true,
     showTaskbarIcon: false,
     silentStart: false,

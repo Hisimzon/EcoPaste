@@ -1,3 +1,5 @@
+use super::{ensure_window_by_label, set_low_resource_clipboard_shortcut, LOW_RESOURCE_MODE};
+use std::sync::atomic::Ordering;
 use tauri::{command, AppHandle, Manager, Runtime, WebviewWindow};
 
 // 显示窗口
@@ -8,9 +10,7 @@ pub async fn show_window<R: Runtime>(
     label: Option<String>,
 ) {
     let window = if let Some(label) = label {
-        app_handle
-            .get_webview_window(&label)
-            .unwrap_or(window)
+        ensure_window_by_label(&app_handle, &label).unwrap_or(window)
     } else {
         window
     };
@@ -23,7 +23,41 @@ pub async fn show_window<R: Runtime>(
 // 隐藏窗口
 #[command]
 pub async fn hide_window<R: Runtime>(_app_handle: AppHandle<R>, window: WebviewWindow<R>) {
+    if LOW_RESOURCE_MODE.load(Ordering::Relaxed) {
+        let _ = window.destroy();
+
+        return;
+    }
+
     let _ = window.hide();
+}
+
+// 设置低占用模式（Linux 暂仅记录状态，窗口唤醒仍由常规路径处理）
+#[command]
+pub async fn set_low_resource_mode<R: Runtime>(
+    _app_handle: AppHandle<R>,
+    _window: WebviewWindow<R>,
+    enabled: bool,
+    clipboard_shortcut: Option<String>,
+) {
+    LOW_RESOURCE_MODE.store(enabled, Ordering::Relaxed);
+    set_low_resource_clipboard_shortcut(clipboard_shortcut);
+}
+
+#[command]
+pub async fn consume_low_resource_clipboard_dirty<R: Runtime>(
+    _app_handle: AppHandle<R>,
+    _window: WebviewWindow<R>,
+) -> bool {
+    false
+}
+
+#[command]
+pub async fn drain_low_resource_clipboard_queue<R: Runtime>(
+    _app_handle: AppHandle<R>,
+    _window: WebviewWindow<R>,
+) -> Vec<serde_json::Value> {
+    Vec::new()
 }
 
 // 显示任务栏图标

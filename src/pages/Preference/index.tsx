@@ -11,7 +11,6 @@ import UpdateApp from "@/components/UpdateApp";
 import { LISTEN_KEY } from "@/constants";
 import { useRegister } from "@/hooks/useRegister";
 import { useSubscribe } from "@/hooks/useSubscribe";
-import { useTray } from "@/hooks/useTray";
 import { isAutostart } from "@/plugins/autostart";
 import { showWindow, toggleWindowVisible } from "@/plugins/window";
 import { clipboardStore } from "@/stores/clipboard";
@@ -31,11 +30,7 @@ const Preference = () => {
   const [activeKey, setActiveKey] = useState("clipboard");
   const contentRef = useRef<HTMLElement>(null);
 
-  const { createTray } = useTray();
-
   useMount(async () => {
-    createTray();
-
     const autostart = await isAutostart();
 
     if (!autostart && !app.silentStart) {

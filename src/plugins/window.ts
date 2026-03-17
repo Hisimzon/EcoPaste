@@ -2,17 +2,23 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { PhysicalPosition, PhysicalSize } from "@tauri-apps/api/window";
+import type { ReadClipboard } from "tauri-plugin-clipboard-x-api";
 import { LISTEN_KEY, WINDOW_LABEL } from "@/constants";
 import { clipboardStore } from "@/stores/clipboard";
 import type { WindowLabel } from "@/types/plugin";
 import { getCursorMonitor } from "@/utils/monitor";
 
 const COMMAND = {
+  CONSUME_LOW_RESOURCE_CLIPBOARD_DIRTY:
+    "plugin:eco-window|consume_low_resource_clipboard_dirty",
+  DRAIN_LOW_RESOURCE_CLIPBOARD_QUEUE:
+    "plugin:eco-window|drain_low_resource_clipboard_queue",
   ENTER_INPUT_MODE: "plugin:eco-window|enter_input_mode",
   ENTER_SEARCH_MODE: "plugin:eco-window|enter_search_mode",
   EXIT_INPUT_MODE: "plugin:eco-window|exit_input_mode",
   EXIT_SEARCH_MODE: "plugin:eco-window|exit_search_mode",
   HIDE_WINDOW: "plugin:eco-window|hide_window",
+  SET_LOW_RESOURCE_MODE: "plugin:eco-window|set_low_resource_mode",
   SET_PINNED: "plugin:eco-window|set_pinned",
   SHOW_TASKBAR_ICON: "plugin:eco-window|show_taskbar_icon",
   SHOW_WINDOW: "plugin:eco-window|show_window",
@@ -36,6 +42,27 @@ export const hideWindow = () => {
 
 export const setWindowPinned = (pinned: boolean) => {
   invoke(COMMAND.SET_PINNED, { pinned });
+};
+
+/**
+ * 设置低占用模式
+ */
+export const setLowResourceMode = (
+  enabled: boolean,
+  clipboardShortcut?: string,
+) => {
+  return invoke(COMMAND.SET_LOW_RESOURCE_MODE, {
+    clipboardShortcut,
+    enabled,
+  });
+};
+
+export const consumeLowResourceClipboardDirty = () => {
+  return invoke<boolean>(COMMAND.CONSUME_LOW_RESOURCE_CLIPBOARD_DIRTY);
+};
+
+export const drainLowResourceClipboardQueue = () => {
+  return invoke<ReadClipboard[]>(COMMAND.DRAIN_LOW_RESOURCE_CLIPBOARD_QUEUE);
 };
 
 /**

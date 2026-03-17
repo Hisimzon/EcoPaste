@@ -12,8 +12,10 @@ import { useImmediateKey } from "@/hooks/useImmediateKey";
 import { useRegister } from "@/hooks/useRegister";
 import { useSubscribeKey } from "@/hooks/useSubscribeKey";
 import { useTauriListen } from "@/hooks/useTauriListen";
+import { useTray } from "@/hooks/useTray";
 import { pasteToClipboard } from "@/plugins/clipboard";
 import {
+  setLowResourceMode,
   showTaskbarIcon,
   showWindow,
   toggleWindowVisible,
@@ -26,6 +28,7 @@ import type {
 } from "@/types/database";
 import type { Store } from "@/types/store";
 import { deepAssign } from "@/utils/object";
+import { saveStore } from "@/utils/store";
 import DockMode from "./components/DockMode";
 import StandardMode from "./components/StandardMode";
 
@@ -40,6 +43,7 @@ export interface State {
   pinned?: boolean;
   activeId?: string;
   list: DatabaseSchemaHistory[];
+  replayInsertedIds: string[];
   eventBus?: EventEmitter<EventBusPayload>;
   quickPasteKeys: string[];
 }
@@ -48,6 +52,7 @@ const INITIAL_STATE: State = {
   group: "all",
   list: [],
   quickPasteKeys: [],
+  replayInsertedIds: [],
 };
 
 interface MainContextValue {
@@ -64,9 +69,11 @@ const Main = () => {
   const { window } = useSnapshot(clipboardStore);
   const eventBus = useEventEmitter<EventBusPayload>();
   const audioRef = useRef<AudioRef>(null);
+  const { createTray } = useTray();
 
   useMount(() => {
     state.eventBus = eventBus;
+    createTray();
   });
 
   useClipboard(state, {
@@ -79,6 +86,22 @@ const Main = () => {
 
   // 任务栏图标的显示与隐藏
   useImmediateKey(globalStore.app, "showTaskbarIcon", showTaskbarIcon);
+
+  // 低占用模式（开启时销毁窗口，仅保留后台监听）
+  useImmediateKey(globalStore.app, "lowResourceMode", async (enabled) => {
+    await createTray();
+
+    await saveStore();
+
+    await setLowResourceMode(enabled, globalStore.shortcut.clipboard);
+  });
+
+  // 同步低占用模式的唤醒快捷键
+  useSubscribeKey(globalStore.shortcut, "clipboard", (value) => {
+    if (!globalStore.app.lowResourceMode) return;
+
+    setLowResourceMode(true, value);
+  });
 
   // 同步配置项
   useTauriListen<Store>(LISTEN_KEY.STORE_CHANGED, ({ payload }) => {

@@ -262,10 +262,12 @@
     "settings": {
       "app_settings": {
         "hints": {
+          "low_resource_mode": "开启后会销毁所有窗口，按剪贴板快捷键时再重建主窗口",
           "silent_start": "手动启动应用时隐藏窗口"
         },
         "label": {
           "auto_start": "登录时启动",
+          "low_resource_mode": "低占用模式",
           "show_menubar_icon": "显示菜单栏图标",
           "show_taskbar_icon": "显示任务栏图标",
           "silent_start": "静默启动"

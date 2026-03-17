@@ -262,10 +262,12 @@
     "settings": {
       "app_settings": {
         "hints": {
+          "low_resource_mode": "When enabled, all windows are destroyed and the main window is recreated by clipboard shortcut",
           "silent_start": "Hide windows when launching applications manually"
         },
         "label": {
           "auto_start": "Start at Login",
+          "low_resource_mode": "Low Resource Mode",
           "show_menubar_icon": "Show Menubar Icon",
           "show_taskbar_icon": "Show Taskbar Icon",
           "silent_start": "Silent Start"

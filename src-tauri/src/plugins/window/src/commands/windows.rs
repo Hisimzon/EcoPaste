@@ -11,7 +11,9 @@ use std::{
     thread,
     time::Duration,
 };
-use tauri::{command, AppHandle, Manager, Runtime, WebviewWindow};
+use tauri::{command, AppHandle, Emitter, Manager, Runtime, WebviewWindow};
+
+const LISTEN_KEY_SHOW_WINDOW: &str = "show-window"; // 前端监听窗口显示事件，用于同步位置等逻辑
 
 // 搜索模式标志（保留用于兼容，但 Windows 不抢占焦点模式下不使用）
 pub static SEARCH_MODE: AtomicBool = AtomicBool::new(false);
@@ -53,14 +55,18 @@ pub fn schedule_main_window_destroy<R: Runtime>(app_handle: &AppHandle<R>, delay
 }
 
 pub fn show_window_now<R: Runtime>(window: &WebviewWindow<R>) {
-    let _ = window.show();
-    let _ = window.unminimize();
-
     if is_main_window(window) {
         cancel_main_window_destroy();
         MAIN_WINDOW_VISIBLE.store(true, Ordering::Relaxed);
+        // Ensure the main window does not steal focus when shown.
         let _ = window.set_focusable(false);
+        let _ = window.show();
+        let _ = window.unminimize();
+        // 触发前端同步窗口位置（低占用唤醒场景）
+        let _ = window.emit(LISTEN_KEY_SHOW_WINDOW, true);
     } else {
+        let _ = window.show();
+        let _ = window.unminimize();
         let _ = window.set_focus();
     }
 }

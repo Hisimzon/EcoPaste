@@ -81,50 +81,57 @@ export const toggleWindowVisible = async () => {
     return hideWindow();
   }
 
-  if (appWindow.label === WINDOW_LABEL.MAIN) {
-    const { window } = clipboardStore;
-
-    // 激活时回到顶部
-    if (window.backTop) {
-      await emit(LISTEN_KEY.ACTIVATE_BACK_TOP);
-    }
-
-    if (window.style === "standard" && window.position !== "remember") {
-      const monitor = await getCursorMonitor();
-
-      if (monitor) {
-        const { position, size, cursorPoint } = monitor;
-        const { width, height } = await appWindow.innerSize();
-        let { x, y } = cursorPoint;
-
-        if (window.position === "follow") {
-          x = Math.min(x, position.x + size.width - width);
-          y = Math.min(y, position.y + size.height - height);
-        } else {
-          x = position.x + (size.width - width) / 2;
-          y = position.y + (size.height - height) / 2;
-        }
-
-        await appWindow.setPosition(
-          new PhysicalPosition(Math.round(x), Math.round(y)),
-        );
-      }
-    } else if (window.style === "dock") {
-      const monitor = await getCursorMonitor();
-
-      if (monitor) {
-        const { width, height } = monitor.size;
-        const { x } = monitor.position;
-        const windowHeight = 400;
-        const y = height - windowHeight;
-
-        await appWindow.setSize(new PhysicalSize(width, windowHeight));
-        await appWindow.setPosition(new PhysicalPosition(x, y));
-      }
-    }
-  }
+  await syncMainWindowPosition();
 
   showWindow();
+};
+
+// 同步主窗口位置（用于低占用唤醒后的定位修正）
+export const syncMainWindowPosition = async () => {
+  const appWindow = getCurrentWebviewWindow();
+
+  if (appWindow.label !== WINDOW_LABEL.MAIN) return;
+
+  const { window } = clipboardStore;
+
+  // 激活时回到顶部
+  if (window.backTop) {
+    await emit(LISTEN_KEY.ACTIVATE_BACK_TOP);
+  }
+
+  if (window.style === "standard" && window.position !== "remember") {
+    const monitor = await getCursorMonitor();
+
+    if (monitor) {
+      const { position, size, cursorPoint } = monitor;
+      const { width, height } = await appWindow.innerSize();
+      let { x, y } = cursorPoint;
+
+      if (window.position === "follow") {
+        x = Math.min(x, position.x + size.width - width);
+        y = Math.min(y, position.y + size.height - height);
+      } else {
+        x = position.x + (size.width - width) / 2;
+        y = position.y + (size.height - height) / 2;
+      }
+
+      await appWindow.setPosition(
+        new PhysicalPosition(Math.round(x), Math.round(y)),
+      );
+    }
+  } else if (window.style === "dock") {
+    const monitor = await getCursorMonitor();
+
+    if (monitor) {
+      const { width, height } = monitor.size;
+      const { x } = monitor.position;
+      const windowHeight = 400;
+      const y = height - windowHeight;
+
+      await appWindow.setSize(new PhysicalSize(width, windowHeight));
+      await appWindow.setPosition(new PhysicalPosition(x, y));
+    }
+  }
 };
 
 /**

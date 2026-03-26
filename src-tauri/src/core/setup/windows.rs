@@ -17,6 +17,13 @@ static SHIFT_PRESSED: AtomicBool = AtomicBool::new(false);
 static ALT_PRESSED: AtomicBool = AtomicBool::new(false);
 static META_PRESSED: AtomicBool = AtomicBool::new(false);
 
+fn reset_modifier_state() {
+    CTRL_PRESSED.store(false, Ordering::Relaxed);
+    SHIFT_PRESSED.store(false, Ordering::Relaxed);
+    ALT_PRESSED.store(false, Ordering::Relaxed);
+    META_PRESSED.store(false, Ordering::Relaxed);
+}
+
 fn is_foreground_main_window() -> bool {
     unsafe {
         let hwnd = GetForegroundWindow();
@@ -97,6 +104,8 @@ pub fn platform(
                             && !MAIN_WINDOW_VISIBLE.load(Ordering::Relaxed)
                         {
                             if handle_low_resource_wake_hotkey(key) {
+                                // 低占用唤醒后重置修饰键，避免状态漂移导致搜索输入失效
+                                reset_modifier_state();
                                 show_main_window(&app_handle_clone);
 
                                 return None;
@@ -109,7 +118,9 @@ pub fn platform(
                                 return Some(event);
                             }
 
-                            if is_foreground_main_window() {
+                            if is_foreground_main_window()
+                                && !LOW_RESOURCE_MODE.load(Ordering::Relaxed)
+                            {
                                 return Some(event);
                             }
 
@@ -159,11 +170,7 @@ pub fn platform(
 
             if let Err(err) = grab(callback) {
                 eprintln!("rdev grab error: {:?}", err);
-
-                CTRL_PRESSED.store(false, Ordering::Relaxed);
-                SHIFT_PRESSED.store(false, Ordering::Relaxed);
-                ALT_PRESSED.store(false, Ordering::Relaxed);
-                META_PRESSED.store(false, Ordering::Relaxed);
+                reset_modifier_state();
 
                 sleep(Duration::from_millis(1200));
 

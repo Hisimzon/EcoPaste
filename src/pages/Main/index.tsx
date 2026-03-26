@@ -18,6 +18,7 @@ import {
   setLowResourceMode,
   showTaskbarIcon,
   showWindow,
+  syncMainWindowPosition,
   toggleWindowVisible,
 } from "@/plugins/window";
 import { clipboardStore } from "@/stores/clipboard";
@@ -147,6 +148,13 @@ const Main = () => {
     } else {
       stopListening();
     }
+  });
+
+  useTauriListen(LISTEN_KEY.SHOW_WINDOW, async () => {
+    if (!globalStore.app.lowResourceMode) return;
+
+    // 低占用唤醒后按偏好设置同步窗口位置
+    await syncMainWindowPosition();
   });
 
   // 监听粘贴为纯文本的快捷键

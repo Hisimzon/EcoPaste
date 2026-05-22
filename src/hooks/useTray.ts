@@ -4,7 +4,8 @@ import { resolveResource } from "@tauri-apps/api/path";
 import { TrayIcon, type TrayIconOptions } from "@tauri-apps/api/tray";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { exit, relaunch } from "@tauri-apps/plugin-process";
-import { useBoolean, useUpdateEffect } from "ahooks";
+import { useBoolean, useLatest, useUpdateEffect } from "ahooks";
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { GITHUB_LINK, LISTEN_KEY } from "@/constants";
 import { showWindow } from "@/plugins/window";
@@ -26,6 +27,15 @@ let creatingTrayPromise: Promise<TrayIcon | void> | null = null;
 export const useTray = () => {
   const [startListen, { toggle }] = useBoolean(true);
   const { t } = useTranslation();
+  const startListenLatest = useLatest(startListen);
+  const toggleMenuItemRef = useRef<MenuItem | null>(null);
+
+  // 根据当前监听状态计算切换项的文本
+  const getToggleText = () => {
+    return startListenLatest.current
+      ? t("component.tray.label.stop_listening")
+      : t("component.tray.label.start_listening");
+  };
 
   // 监听是否显示菜单栏图标
   useSubscribeKey(globalStore.app, "showMenubarIcon", async (value) => {
@@ -44,7 +54,8 @@ export const useTray = () => {
   });
 
   useUpdateEffect(() => {
-    updateTrayMenu();
+    // 直接更新切换项文本，避免整菜单重建在 Windows 上的失效问题
+    toggleMenuItemRef.current?.setText(getToggleText());
 
     emit(LISTEN_KEY.TOGGLE_LISTEN_CLIPBOARD, startListen);
   }, [startListen]);
@@ -114,6 +125,14 @@ export const useTray = () => {
   const getTrayMenu = async () => {
     const { appVersion } = globalStore.env;
 
+    // 单独构建切换监听项并保留引用，便于后续直接 setText 更新
+    const toggleItem = await MenuItem.new({
+      action: toggle,
+      id: TRAY_MENU_TOGGLE_LISTEN_ID,
+      text: getToggleText(),
+    });
+    toggleMenuItemRef.current = toggleItem;
+
     const items = await Promise.all([
       MenuItem.new({
         accelerator: isMac ? "Cmd+," : void 0,
@@ -121,13 +140,7 @@ export const useTray = () => {
         id: TRAY_MENU_PREFERENCE_ID,
         text: t("component.tray.label.preference"),
       }),
-      MenuItem.new({
-        action: toggle,
-        id: TRAY_MENU_TOGGLE_LISTEN_ID,
-        text: startListen
-          ? t("component.tray.label.stop_listening")
-          : t("component.tray.label.start_listening"),
-      }),
+      Promise.resolve(toggleItem),
       PredefinedMenuItem.new({ item: "Separator" }),
       MenuItem.new({
         action: () => {

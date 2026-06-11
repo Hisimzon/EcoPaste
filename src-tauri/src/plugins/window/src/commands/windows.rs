@@ -1,9 +1,8 @@
 use super::{
-    clear_low_resource_clipboard_state,
-    consume_low_resource_clipboard_dirty_flag, consume_window_just_created, ensure_window_by_label,
-    is_main_window, is_window_page_loaded, mark_window_pending_show,
-    set_low_resource_clipboard_shortcut, take_low_resource_clipboard_queue, LOW_RESOURCE_MODE,
-    MAIN_WINDOW_LABEL,
+    clear_low_resource_clipboard_state, consume_low_resource_clipboard_dirty_flag,
+    consume_window_just_created, ensure_window_by_label, is_main_window, is_window_page_loaded,
+    mark_window_pending_show, set_low_resource_clipboard_shortcut,
+    take_low_resource_clipboard_queue, LOW_RESOURCE_MODE, MAIN_WINDOW_LABEL,
     PREFERENCE_WINDOW_LABEL,
 };
 use std::{
@@ -12,6 +11,11 @@ use std::{
     time::Duration,
 };
 use tauri::{command, AppHandle, Emitter, Manager, Runtime, WebviewWindow};
+use windows::Win32::Foundation::HWND;
+use windows::Win32::UI::WindowsAndMessaging::{
+    GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST,
+    SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, WS_EX_NOACTIVATE,
+};
 
 const LISTEN_KEY_SHOW_WINDOW: &str = "show-window"; // 前端监听窗口显示事件，用于同步位置等逻辑
 
@@ -60,8 +64,7 @@ pub fn show_window_now<R: Runtime>(window: &WebviewWindow<R>) {
         MAIN_WINDOW_VISIBLE.store(true, Ordering::Relaxed);
         // Ensure the main window does not steal focus when shown.
         let _ = window.set_focusable(false);
-        let _ = window.show();
-        let _ = window.unminimize();
+        show_main_window_without_activation(window);
         // 触发前端同步窗口位置（低占用唤醒场景）
         let _ = window.emit(LISTEN_KEY_SHOW_WINDOW, true);
     } else {
@@ -69,6 +72,62 @@ pub fn show_window_now<R: Runtime>(window: &WebviewWindow<R>) {
         let _ = window.unminimize();
         let _ = window.set_focus();
     }
+}
+
+fn show_main_window_without_activation<R: Runtime>(window: &WebviewWindow<R>) {
+    let hwnd = set_main_window_no_activate(window, true);
+
+    let _ = window.show();
+    let _ = window.unminimize();
+
+    if let Some(hwnd) = hwnd {
+        unsafe {
+            let _ = SetWindowPos(
+                hwnd,
+                HWND_TOPMOST,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            );
+        }
+
+        return;
+    }
+}
+
+fn set_main_window_no_activate<R: Runtime>(
+    window: &WebviewWindow<R>,
+    enabled: bool,
+) -> Option<HWND> {
+    let hwnd = window.hwnd().ok().map(|hwnd| HWND(hwnd.0))?;
+
+    unsafe {
+        let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        let no_activate_style = WS_EX_NOACTIVATE.0 as isize;
+        let next_style = if enabled {
+            style | no_activate_style
+        } else {
+            style & !no_activate_style
+        };
+
+        if next_style != style {
+            let _ = SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next_style);
+        }
+
+        let _ = SetWindowPos(
+            hwnd,
+            HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+        );
+    }
+
+    Some(hwnd)
 }
 
 // 显示窗口
@@ -116,6 +175,7 @@ pub async fn enter_input_mode<R: Runtime>(_app_handle: AppHandle<R>, window: Web
     INPUT_MODE.store(true, Ordering::Relaxed);
 
     if is_main_window(&window) {
+        set_main_window_no_activate(&window, false);
         let _ = window.set_focusable(true);
         let _ = window.set_focus();
     }
@@ -128,6 +188,7 @@ pub async fn exit_input_mode<R: Runtime>(_app_handle: AppHandle<R>, window: Webv
 
     if is_main_window(&window) {
         let _ = window.set_focusable(false);
+        set_main_window_no_activate(&window, true);
     }
 }
 

@@ -14,6 +14,12 @@ import { normalizeTextThreshold } from "@/utils/threshold";
 import { paste } from "./paste";
 import { hideWindow } from "./window";
 
+const PASTE_FOCUS_SETTLE_DELAY = 120;
+
+const wait = (duration: number) => {
+  return new Promise<void>((resolve) => setTimeout(resolve, duration));
+};
+
 export const getClipboardTextSubtype = async (value: string) => {
   try {
     if (isURL(value)) {
@@ -79,8 +85,9 @@ export const pasteToClipboard = async (
     await writeToClipboard(data);
   }
 
-  await paste();
+  await hideWindow();
 
-  // 粘贴完成后隐藏窗口
-  hideWindow();
+  await wait(PASTE_FOCUS_SETTLE_DELAY);
+
+  await paste();
 };

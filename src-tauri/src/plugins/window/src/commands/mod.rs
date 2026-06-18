@@ -3,20 +3,12 @@ use std::{
     fs::read_to_string,
     sync::{
         atomic::{AtomicBool, Ordering},
-        LazyLock,
-        Mutex,
+        LazyLock, Mutex,
     },
 };
 use tauri::{
-    async_runtime::spawn,
-    webview::PageLoadEvent,
-    window::Color,
-    AppHandle,
-    Manager,
-    Runtime,
-    WebviewUrl,
-    WebviewWindow,
-    WebviewWindowBuilder,
+    async_runtime::spawn, webview::PageLoadEvent, window::Color, AppHandle, Manager, Runtime,
+    WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
 
 // 主窗口的label
@@ -113,7 +105,6 @@ pub fn push_low_resource_clipboard_snapshot(snapshot: serde_json::Value) {
     };
 
     if queue.back().is_some_and(|last| last == &snapshot) {
-        mark_low_resource_clipboard_dirty();
         return;
     }
 
@@ -122,8 +113,6 @@ pub fn push_low_resource_clipboard_snapshot(snapshot: serde_json::Value) {
     while queue.len() > LOW_RESOURCE_CLIPBOARD_QUEUE_MAX {
         queue.pop_front();
     }
-
-    mark_low_resource_clipboard_dirty();
 }
 
 pub fn take_low_resource_clipboard_queue() -> Vec<serde_json::Value> {
@@ -134,7 +123,7 @@ pub fn take_low_resource_clipboard_queue() -> Vec<serde_json::Value> {
         .unwrap_or_default()
 }
 
-pub fn clear_low_resource_clipboard_state() {
+pub fn clear_low_resource_clipboard_pending_state() {
     LOW_RESOURCE_CLIPBOARD_DIRTY.store(false, Ordering::Relaxed);
 
     if let Ok(mut queue) = LOW_RESOURCE_CLIPBOARD_QUEUE.lock() {
@@ -209,7 +198,9 @@ fn on_window_page_loaded<R: Runtime>(window: WebviewWindow<R>) {
     }
 }
 
-fn with_page_load_handler<R: Runtime>(builder: WebviewWindowBuilder<R, AppHandle<R>>) -> WebviewWindowBuilder<R, AppHandle<R>> {
+fn with_page_load_handler<R: Runtime>(
+    builder: WebviewWindowBuilder<R, AppHandle<R>>,
+) -> WebviewWindowBuilder<R, AppHandle<R>> {
     builder.on_page_load(|window, payload| {
         if payload.event() != PageLoadEvent::Finished {
             return;

@@ -1,4 +1,7 @@
-use super::{ensure_window_by_label, set_low_resource_clipboard_shortcut, LOW_RESOURCE_MODE};
+use super::{
+    clear_low_resource_clipboard_pending_state, ensure_window_by_label,
+    set_low_resource_clipboard_shortcut, LOW_RESOURCE_MODE,
+};
 use std::sync::atomic::Ordering;
 use tauri::{command, AppHandle, Manager, Runtime, WebviewWindow};
 
@@ -58,6 +61,14 @@ pub async fn drain_low_resource_clipboard_queue<R: Runtime>(
     _window: WebviewWindow<R>,
 ) -> Vec<serde_json::Value> {
     Vec::new()
+}
+
+#[command]
+pub async fn clear_low_resource_clipboard_state<R: Runtime>(
+    _app_handle: AppHandle<R>,
+    _window: WebviewWindow<R>,
+) {
+    clear_low_resource_clipboard_pending_state();
 }
 
 // 显示任务栏图标

@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import AdaptiveSelect from "@/components/AdaptiveSelect";
 import { LISTEN_KEY } from "@/constants";
 import { deleteHistory, selectHistory } from "@/database/history";
+import { clearLowResourceClipboardState } from "@/plugins/window";
 import { dayjs, formatDate } from "@/utils/dayjs";
 
 const { RangePicker } = DatePicker;
@@ -69,6 +70,7 @@ const Delete = () => {
       const { timeRange, customRange, deleteFavorite } = form.getFieldsValue();
 
       setTrue();
+      await clearLowResourceClipboardState();
 
       let range: Dayjs[] = [];
 
@@ -100,6 +102,7 @@ const Delete = () => {
 
       // 并行删除所有条目
       await Promise.all(itemsToDelete.map((item) => deleteHistory(item)));
+      await clearLowResourceClipboardState();
 
       toggle();
       message.success(t("preference.history.history.hints.delete_success"));

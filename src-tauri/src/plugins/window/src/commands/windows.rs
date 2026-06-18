@@ -1,5 +1,5 @@
 use super::{
-    clear_low_resource_clipboard_state, consume_low_resource_clipboard_dirty_flag,
+    clear_low_resource_clipboard_pending_state, consume_low_resource_clipboard_dirty_flag,
     consume_window_just_created, ensure_window_by_label, is_main_window, is_window_page_loaded,
     mark_window_pending_show, set_low_resource_clipboard_shortcut,
     take_low_resource_clipboard_queue, LOW_RESOURCE_MODE, MAIN_WINDOW_LABEL,
@@ -226,7 +226,7 @@ pub async fn set_low_resource_mode<R: Runtime>(
 
     if !enabled {
         cancel_main_window_destroy();
-        clear_low_resource_clipboard_state();
+        clear_low_resource_clipboard_pending_state();
         return;
     }
 
@@ -260,6 +260,14 @@ pub async fn drain_low_resource_clipboard_queue<R: Runtime>(
     _window: WebviewWindow<R>,
 ) -> Vec<serde_json::Value> {
     take_low_resource_clipboard_queue()
+}
+
+#[command]
+pub async fn clear_low_resource_clipboard_state<R: Runtime>(
+    _app_handle: AppHandle<R>,
+    _window: WebviewWindow<R>,
+) {
+    clear_low_resource_clipboard_pending_state();
 }
 
 // 显示任务栏图标

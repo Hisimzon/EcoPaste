@@ -1,5 +1,6 @@
 use super::{
-    ensure_window_by_label, is_main_window, set_low_resource_clipboard_shortcut, LOW_RESOURCE_MODE,
+    clear_low_resource_clipboard_pending_state, ensure_window_by_label, is_main_window,
+    set_low_resource_clipboard_shortcut, LOW_RESOURCE_MODE,
 };
 use crate::MAIN_WINDOW_LABEL;
 use std::sync::atomic::Ordering;
@@ -76,6 +77,14 @@ pub async fn drain_low_resource_clipboard_queue<R: Runtime>(
     _window: WebviewWindow<R>,
 ) -> Vec<serde_json::Value> {
     Vec::new()
+}
+
+#[command]
+pub async fn clear_low_resource_clipboard_state<R: Runtime>(
+    _app_handle: AppHandle<R>,
+    _window: WebviewWindow<R>,
+) {
+    clear_low_resource_clipboard_pending_state();
 }
 
 // 显示任务栏图标

@@ -172,6 +172,20 @@ export const useClipboard = (
         }
       }
 
+      const dirty = await consumeLowResourceClipboardDirty().catch(() => false);
+
+      if (dirty) {
+        const latest = await readClipboard().catch(() => ({}));
+
+        const id = await enqueueClipboardChange(latest, {
+          skipVisibleInsert: true,
+        });
+
+        if (id) {
+          replayInsertedIds.push(id);
+        }
+      }
+
       await emit(LISTEN_KEY.REFRESH_CLIPBOARD_LIST);
 
       state.replayInsertedIds = [...new Set(replayInsertedIds.reverse())].slice(

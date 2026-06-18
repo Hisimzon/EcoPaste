@@ -9,6 +9,8 @@ import type { WindowLabel } from "@/types/plugin";
 import { getCursorMonitor } from "@/utils/monitor";
 
 const COMMAND = {
+  CLEAR_LOW_RESOURCE_CLIPBOARD_STATE:
+    "plugin:eco-window|clear_low_resource_clipboard_state",
   CONSUME_LOW_RESOURCE_CLIPBOARD_DIRTY:
     "plugin:eco-window|consume_low_resource_clipboard_dirty",
   DRAIN_LOW_RESOURCE_CLIPBOARD_QUEUE:
@@ -63,6 +65,10 @@ export const consumeLowResourceClipboardDirty = () => {
 
 export const drainLowResourceClipboardQueue = () => {
   return invoke<ReadClipboard[]>(COMMAND.DRAIN_LOW_RESOURCE_CLIPBOARD_QUEUE);
+};
+
+export const clearLowResourceClipboardState = () => {
+  return invoke(COMMAND.CLEAR_LOW_RESOURCE_CLIPBOARD_STATE);
 };
 
 /**

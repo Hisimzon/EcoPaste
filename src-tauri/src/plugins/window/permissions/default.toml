@@ -2,4 +2,4 @@
 
 [default]
 description = "Default permissions for the plugin"
-permissions = ["allow-show-window", "allow-hide-window", "allow-set-low-resource-mode", "allow-consume-low-resource-clipboard-dirty", "allow-drain-low-resource-clipboard-queue", "allow-show-taskbar-icon", "allow-enter-search-mode", "allow-exit-search-mode", "allow-enter-input-mode", "allow-exit-input-mode"]
+permissions = ["allow-show-window", "allow-hide-window", "allow-set-low-resource-mode", "allow-consume-low-resource-clipboard-dirty", "allow-drain-low-resource-clipboard-queue", "allow-clear-low-resource-clipboard-state", "allow-show-taskbar-icon", "allow-enter-search-mode", "allow-exit-search-mode", "allow-enter-input-mode", "allow-exit-input-mode"]

@@ -4,6 +4,7 @@ const COMMANDS: &[&str] = &[
     "set_low_resource_mode",
     "consume_low_resource_clipboard_dirty",
     "drain_low_resource_clipboard_queue",
+    "clear_low_resource_clipboard_state",
     "show_taskbar_icon",
     "enter_search_mode",
     "exit_search_mode",

@@ -16,6 +16,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::set_low_resource_mode,
             commands::consume_low_resource_clipboard_dirty,
             commands::drain_low_resource_clipboard_queue,
+            commands::clear_low_resource_clipboard_state,
             commands::show_taskbar_icon,
             commands::enter_search_mode,
             commands::exit_search_mode,

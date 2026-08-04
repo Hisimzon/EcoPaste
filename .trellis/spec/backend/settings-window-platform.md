@@ -385,6 +385,140 @@ Failures in side-effect refresh after a successful settings write are logged and
 do not roll back the persisted settings unless the called command itself is the
 direct user action, such as `set_autostart`.
 
+## Scenario: Windows Autostart Entry Deduplication and Duplicate Launches
+
+### 1. Scope / Trigger
+
+Changing Windows autostart behavior touches registry Run keys, Task Manager
+startup approval records, persisted settings, and the administrator relaunch
+task. Keep this Rust-owned; React only toggles `general.autoStart`.
+
+### 2. Signatures
+
+- Setting: `Settings.general.auto_start: bool`.
+- Commands:
+  - `get_autostart() -> bool`
+  - `set_autostart(enabled: bool) -> ()`
+- Startup sync:
+  - `autostart::sync_enabled(app: &AppHandle, enabled: bool) -> Result<()>`
+- Launch-source matcher:
+  - `autostart::is_autostart_launch(args: &[String]) -> bool`
+- Windows Run value name: app package name, currently `EcoPaste`.
+- Windows autostart launch arg: `--auto-launch`.
+
+### 3. Contracts
+
+- Normal Windows autostart uses one effective Run entry only.
+- New Run entries are written with `WindowsEnableMode::CurrentUser`, so an
+  elevated EcoPaste process must not create a fresh HKLM Run value.
+- Startup initialization syncs the OS Run entries with
+  `settings.general.auto_start`, so upgrades can repair stale entries from older
+  versions.
+- Registry cleanup cannot prevent two legacy Run entries from racing before the
+  primary instance finishes setup. The single-instance callback must ignore a
+  secondary process whose arguments contain `--auto-launch`; it must not show
+  the preference window for that process.
+- A regular second launch without `--auto-launch` remains an explicit user
+  action and opens the default foreground window.
+- When enabling autostart and an HKLM Run value already exists, Rust first tries
+  to delete HKLM. If access is denied, Rust deletes HKCU and keeps HKLM as the
+  only effective startup entry instead of creating a duplicate.
+- When disabling autostart, Rust must remove HKCU and HKLM Run entries. If HKLM
+  cannot be removed because the process is not elevated, the direct
+  `set_autostart(false)` action fails instead of persisting a false setting while
+  Windows can still start the app.
+- Remove matching `StartupApproved\Run` shadow values best-effort when deleting
+  Run values so Task Manager and Autoruns do not keep stale EcoPaste rows.
+- `admin::sync_scheduled_task` owns the `EcoPasteAdmin` task for administrator
+  relaunch support. Do not use that task as a second normal autostart path
+  without redesigning the interaction with `general.auto_start`.
+
+### 4. Validation & Error Matrix
+
+- HKCU Run missing -> cleanup succeeds.
+- HKLM Run missing -> cleanup succeeds.
+- Enable with removable HKLM Run -> delete HKLM, then create/update HKCU.
+- Enable with inaccessible HKLM Run -> delete HKCU, return success with HKLM as
+  the only startup entry.
+- Disable with inaccessible HKLM Run -> command error from registry access;
+  frontend should not persist `general.autoStart=false`.
+- Startup sync failure after settings load -> log warning and continue app
+  startup.
+- Secondary instance with `--auto-launch` -> return from the single-instance
+  callback without showing a window.
+- Secondary instance without `--auto-launch` -> show the default foreground
+  window.
+
+### 5. Good/Base/Bad Cases
+
+- Good: user enables autostart from an elevated process and only HKCU Run is
+  created.
+- Good: user upgrades with both HKCU and HKLM Run values; next startup removes
+  the duplicate when permissions allow, while the already-racing secondary
+  instance exits without opening preferences.
+- Base: user has a locked HKLM Run value from an older install; EcoPaste keeps
+  that single entry and avoids adding HKCU.
+- Base: user manually launches EcoPaste while it is running; the primary
+  instance opens preferences as expected.
+- Bad: `auto-launch` stays in dynamic Windows mode and creates HKLM when the app
+  happens to be elevated.
+- Bad: disabling autostart reports success while an inaccessible HKLM Run value
+  remains active.
+
+### 6. Tests Required
+
+- Backend: `cargo check`, `cargo clippy -- -D warnings`, and `cargo test`.
+- Unit tests: `is_autostart_launch` returns true when `--auto-launch` is present
+  and false for a regular executable-only argument list.
+- Windows validation: enable autostart as normal user and elevated user, inspect
+  Autoruns for a single EcoPaste Run entry, then disable and verify no Run entry
+  remains.
+- Upgrade validation: seed both HKCU and HKLM `...\Run\EcoPaste` values, launch
+  EcoPaste once, and verify duplicate cleanup or single-entry fallback.
+- Administrator validation: with `general.runAsAdmin=true`, confirm
+  `EcoPasteAdmin` remains a relaunch helper and does not combine with duplicate
+  Run entries to start multiple processes at login.
+
+### 7. Wrong vs Correct
+
+Wrong:
+
+```rust
+AutoLaunchBuilder::new()
+    .set_app_name(&app_name)
+    .set_app_path(&exe_path)
+    .set_args(&[AUTO_LAUNCH_ARG])
+    .build()?;
+```
+
+Correct:
+
+```rust
+let mut builder = AutoLaunchBuilder::new();
+builder
+    .set_app_name(&app_name)
+    .set_app_path(&exe_path)
+    .set_args(&[AUTO_LAUNCH_ARG]);
+builder.set_windows_enable_mode(WindowsEnableMode::CurrentUser);
+```
+
+Wrong:
+
+```rust
+if backup::backup_path_from_args(&argv).is_none() {
+    show_default_foreground_window(app_handle)?;
+}
+```
+
+Correct:
+
+```rust
+if autostart::is_autostart_launch(&argv) {
+    return;
+}
+show_default_foreground_window(app_handle)?;
+```
+
 ## Scenario: Windows Administrator Launch
 
 ### 1. Scope / Trigger
@@ -516,6 +650,11 @@ not a frontend-only preference action.
 - Rust owns update checks, signature verification, downloaded bytes, install,
   auto-check throttling, skipped-version persistence, and automatic update
   window display.
+- On macOS, `tauri-plugin-updater` installation APIs replace the application
+  files and return without relaunching the process. `install_update` must
+  request an application restart after installation succeeds and must not
+  restart after an install error. On Windows the updater exits and delegates
+  relaunch to the spawned installer before this call can return.
 - `update::schedule_auto_check` must run for the whole app session: it performs
   the initial delayed background check, then computes the next due time from
   `update.lastCheckedAt + update.frequency` so the configured cadence is honored
@@ -550,6 +689,10 @@ not a frontend-only preference action.
 - Version mismatch between UI request and Rust pending update ->
   `the selected update is no longer current`.
 - Install before successful download -> `update is not downloaded`.
+- Install failure -> propagated command error; the current process stays open.
+- Successful macOS install -> Rust logs the installed version and requests an
+  application restart. Successful Windows install -> the updater exits and the
+  installer owns relaunch.
 - Signature mismatch -> propagated from `tauri-plugin-updater` download
   verification; frontend should show the command error and remain in error
   state.
@@ -558,11 +701,14 @@ not a frontend-only preference action.
 
 - Good: user opens About -> Check for Updates; Rust opens the `update` window,
   checks stable/beta endpoint according to settings, downloads through Rust,
-  emits progress, verifies signature, then installs.
+  emits progress, verifies signature, installs, then requests an application
+  restart.
 - Base: no update is available; Rust clears pending update state and the window
   renders the latest-version state.
 - Bad: React stores downloaded bytes, performs signature checks, or decides
   auto-check frequency locally.
+- Bad: Rust assumes `Update::install` or `Update::download_and_install`
+  automatically relaunches the application on macOS.
 
 ### 6. Tests Required
 
@@ -572,6 +718,9 @@ not a frontend-only preference action.
   `should_auto_check`.
 - Frontend checks: `pnpm tsc` and `pnpm lint`.
 - Packaging/build check: `pnpm build` for route and locale integration.
+- Manual signed-artifact check must assert that a successful install terminates
+  the old process, relaunches EcoPaste, and reports the new version after
+  startup.
 - Manual update-server checks when release artifacts exist:
   - mock endpoint returns newer signed version -> update found and install path
     starts.
@@ -597,4 +746,19 @@ Correct:
 import { checkForUpdates } from "@/commands";
 
 const status = await checkForUpdates();
+```
+
+Wrong:
+
+```rust
+app.state::<UpdateState>().install_downloaded(&version)?;
+Ok(())
+```
+
+Correct:
+
+```rust
+app.state::<UpdateState>().install_downloaded(&version)?;
+app.request_restart();
+Ok(())
 ```

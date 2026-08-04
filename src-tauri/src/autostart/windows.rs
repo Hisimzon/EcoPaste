@@ -105,6 +105,11 @@ fn cleanup_current_user_run_entry(app_name: &str) -> Result<()> {
 
 fn cleanup_windows_run_entries(app_name: &str) -> Result<()> {
     cleanup_current_user_run_entry(app_name)?;
+
+    if !system_run_entry_exists(app_name)? {
+        return Ok(());
+    }
+
     cleanup_system_run_entry(app_name)
         .map_err(|err| registry_app_error("remove system autostart entry", err))
 }

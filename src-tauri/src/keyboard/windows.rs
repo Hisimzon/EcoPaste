@@ -14,7 +14,7 @@ use winapi::um::winuser::{
     WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP,
 };
 
-use super::NAV_EVENT;
+use super::{NAV_EVENT, SEARCH_INPUT_EVENT};
 
 static NAV_ENABLED: AtomicBool = AtomicBool::new(false);
 static HOOK_THREAD_ID: Mutex<Option<u32>> = Mutex::new(None);
@@ -65,6 +65,46 @@ fn preview_key(vk: u32) -> Option<&'static str> {
     match vk as i32 {
         VK_SPACE => Some(" "),
         _ => None,
+    }
+}
+
+fn printable_key(vk: u32, shift_down: bool) -> Option<String> {
+    let character = match vk {
+        0x41..=0x5A => char::from_u32(vk + u32::from(b'a') - u32::from(b'A'))?,
+        0x30..=0x39 => char::from_u32(vk)?,
+        0x60..=0x69 => char::from_u32(vk - 0x60 + u32::from(b'0'))?,
+        0x6A => '*',
+        0x6B => '+',
+        0x6D => '-',
+        0x6E => '.',
+        0x6F => '/',
+        0xBD => if shift_down { '_' } else { '-' },
+        0xBB => if shift_down { '+' } else { '=' },
+        0xBC => if shift_down { '<' } else { ',' },
+        0xBE => if shift_down { '>' } else { '.' },
+        0xBF => if shift_down { '?' } else { '/' },
+        0xC0 => if shift_down { '~' } else { '`' },
+        0xDB => if shift_down { '{' } else { '[' },
+        0xDC => if shift_down { '|' } else { '\\' },
+        0xDD => if shift_down { '}' } else { ']' },
+        0xDE => if shift_down { '"' } else { '\'' },
+        0xBA => if shift_down { ':' } else { ';' },
+        _ => return None,
+    };
+
+    Some(character.to_string())
+}
+
+fn emit_search_input(action: &str, text: Option<String>) {
+    let Some(app) = APP_HANDLE.get() else {
+        return;
+    };
+
+    if let Err(err) = app.emit(
+        SEARCH_INPUT_EVENT,
+        json!({ "action": action, "text": text }),
+    ) {
+        log::warn!("emit search input event failed: {err:?}");
     }
 }
 
@@ -137,6 +177,10 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
     let vk = kbd.vkCode;
     let msg = wparam as UINT;
     let ctrl_down = (GetAsyncKeyState(VK_CONTROL) as u16) & 0x8000 != 0;
+    let shift_down = (GetAsyncKeyState(VK_SHIFT) as u16) & 0x8000 != 0;
+    let alt_down = (GetAsyncKeyState(0x12) as u16) & 0x8000 != 0;
+    let meta_down = (GetAsyncKeyState(0x5B) as u16) & 0x8000 != 0
+        || (GetAsyncKeyState(0x5C) as u16) & 0x8000 != 0;
 
     let is_ctrl = matches!(vk as i32, VK_CONTROL | VK_LCONTROL | VK_RCONTROL);
 
@@ -174,6 +218,10 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
 
     if msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN {
         if let Some(shortcut_key) = shortcut_key {
+            if shortcut_key == "f" {
+                emit_search_input("replace", None);
+            }
+
             if let Some(app) = APP_HANDLE.get() {
                 if let Err(err) = app.emit(
                     NAV_EVENT,
@@ -188,6 +236,26 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
                 .expect("consumed keys poisoned")
                 .insert(vk);
             return 1;
+        }
+
+        if !ctrl_down && !alt_down && !meta_down {
+            if vk as i32 == VK_BACK {
+                emit_search_input("backspace", None);
+                consumed_keys()
+                    .lock()
+                    .expect("consumed keys poisoned")
+                    .insert(vk);
+                return 1;
+            }
+
+            if let Some(text) = printable_key(vk, shift_down) {
+                emit_search_input("append", Some(text));
+                consumed_keys()
+                    .lock()
+                    .expect("consumed keys poisoned")
+                    .insert(vk);
+                return 1;
+            }
         }
 
         if let Some(preview_key) = preview_key {

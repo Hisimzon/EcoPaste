@@ -87,7 +87,17 @@ function findEditableElement(target: EventTarget | null): HTMLElement | null {
 }
 
 function shouldUseNativeEditableKeyboard(target: EventTarget | null) {
-  return findEditableElement(target) !== null;
+  const element = findEditableElement(target);
+  if (!element) return false;
+
+  if (
+    element instanceof HTMLInputElement ||
+    element instanceof HTMLTextAreaElement
+  ) {
+    return !element.readOnly && !element.disabled;
+  }
+
+  return true;
 }
 
 function shouldHandoffEditableKeyboard(

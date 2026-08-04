@@ -28,6 +28,13 @@ pub async fn init(app: &AppHandle) -> Result<SqlitePool> {
         .await
         .context("failed to run sqlite migrations")?;
 
+    let backfill_pool = pool.clone();
+    tokio::spawn(async move {
+        if let Err(err) = crate::db::pinyin::backfill(&backfill_pool).await {
+            log::warn!("failed to backfill pinyin search index: {err}");
+        }
+    });
+
     log::info!("sqlite pool ready at {path:?}");
     Ok(pool)
 }

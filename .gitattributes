@@ -16,3 +16,4 @@
 *.png binary
 *.ico binary
 *.icns binary
+src-tauri/migrations/0002_pinyin_search.sql text eol=lf

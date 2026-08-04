@@ -7,6 +7,7 @@ use crate::core::Result;
 use crate::db::models::{
     ClipboardGroupFilter, ClipboardItem, ClipboardItemQuery, ClipboardItemSort, ClipboardKind,
 };
+use crate::db::pinyin::queue_update;
 
 const SELECT_ITEM: &str = "SELECT id, kind, sub_kind, group_id, source_app_id, content, \
      content_hash, search_text, summary, file_types, size, width, height, use_count, is_favorite, is_pinned, \
@@ -106,8 +107,8 @@ pub async fn insert_item(pool: &SqlitePool, item: &ClipboardItem) -> Result<()> 
         "INSERT INTO clipboard_items \
          (id, kind, sub_kind, group_id, source_app_id, content, content_hash, search_text, \
           summary, file_types, size, width, height, use_count, is_favorite, is_pinned, is_sensitive, platform, note, \
-          created_at, updated_at) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          search_pinyin, search_pinyin_initials, created_at, updated_at) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(item.id.as_str())
     .bind(item.kind)
@@ -128,11 +129,14 @@ pub async fn insert_item(pool: &SqlitePool, item: &ClipboardItem) -> Result<()> 
     .bind(item.is_sensitive)
     .bind(item.platform)
     .bind(item.note.as_deref())
+    .bind::<Option<String>>(None)
+    .bind::<Option<String>>(None)
     .bind(item.created_at)
     .bind(item.updated_at)
     .execute(pool)
     .await
     .context("failed to insert clipboard item")?;
+    queue_update(pool, item.id.as_str());
     Ok(())
 }
 
@@ -226,12 +230,17 @@ pub async fn toggle_item_pinned(pool: &SqlitePool, id: &str) -> Result<bool> {
 
 /// 更新备注，传 `None` 清空备注。
 pub async fn update_item_note(pool: &SqlitePool, id: &str, note: Option<&str>) -> Result<()> {
-    sqlx::query("UPDATE clipboard_items SET note = ? WHERE id = ?")
-        .bind(note)
-        .bind(id)
-        .execute(pool)
+    sqlx::query(
+        "UPDATE clipboard_items
+         SET note = ?, search_pinyin = NULL, search_pinyin_initials = NULL
+         WHERE id = ?",
+    )
+    .bind(note)
+    .bind(id)
+    .execute(pool)
         .await
         .context("failed to update clipboard item note")?;
+    queue_update(pool, id);
     Ok(())
 }
 
@@ -516,10 +525,20 @@ fn push_filter_clauses(
     match keyword {
         KeywordFilter::None => {}
         KeywordFilter::Fts(expr) => {
+            let pinyin_keyword = expr
+                .replace('"', "")
+                .replace('*', "")
+                .split_whitespace()
+                .collect::<String>();
+
             qb.push(
-                " AND clipboard_items.rowid IN (SELECT rowid FROM clipboard_items_fts WHERE clipboard_items_fts MATCH ",
+                " AND (clipboard_items.rowid IN (SELECT rowid FROM clipboard_items_fts WHERE clipboard_items_fts MATCH ",
             )
             .push_bind(expr.clone())
+            .push(") OR clipboard_items.search_pinyin LIKE ")
+            .push_bind(format!("%{pinyin_keyword}%"))
+            .push(" OR clipboard_items.search_pinyin_initials LIKE ")
+            .push_bind(format!("%{pinyin_keyword}%"))
             .push(")");
         }
         KeywordFilter::Like(kw) => {
@@ -529,6 +548,10 @@ fn push_filter_clauses(
             qb.push(" AND (clipboard_items.search_text LIKE ")
                 .push_bind(pattern.clone())
                 .push(" ESCAPE '\\' OR clipboard_items.note LIKE ")
+                .push_bind(pattern.clone())
+                .push(" ESCAPE '\\' OR clipboard_items.search_pinyin LIKE ")
+                .push_bind(pattern.clone())
+                .push(" ESCAPE '\\' OR clipboard_items.search_pinyin_initials LIKE ")
                 .push_bind(pattern)
                 .push(" ESCAPE '\\')");
         }

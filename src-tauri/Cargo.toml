@@ -36,6 +36,7 @@ blake3 = "1"
 clipboard-rs = "0.3"
 uuid = { version = "1", features = ["v4"] }
 regex = "1"
+pinyin = { version = "0.11", default-features = false, features = ["plain"] }
 tokio = { version = "1", features = ["time"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"

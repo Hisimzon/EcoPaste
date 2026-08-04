@@ -2,7 +2,10 @@ import { type GetRef, Input, Modal } from "antd";
 import type { ChangeEvent, FC } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { updateClipboardItemNote } from "@/commands";
+import {
+  setClipboardWindowEditing,
+  updateClipboardItemNote,
+} from "@/commands";
 import type { ClipboardItem } from "@/types/clipboard";
 
 interface NoteModalProps {
@@ -41,6 +44,12 @@ const NoteModal: FC<NoteModalProps> = (props) => {
     if (!item) return;
 
     setValue(item.note ?? "");
+
+    void setClipboardWindowEditing(true);
+
+    return () => {
+      void setClipboardWindowEditing(false);
+    };
   }, [item]);
 
   const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {

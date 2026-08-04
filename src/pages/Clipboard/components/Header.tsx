@@ -1,6 +1,6 @@
 import { useDebounceFn } from "ahooks";
 import type { MenuProps } from "antd";
-import type { ChangeEvent, FC } from "react";
+import type { FC } from "react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSnapshot } from "valtio";
@@ -90,8 +90,8 @@ const Header: FC = () => {
    */
   const { cancel: cancelKeywordChange, run: handleKeywordChange } =
     useDebounceFn(
-      (event: ChangeEvent<HTMLInputElement>) => {
-        clipboardViewState.keyword = event.target.value.trim();
+      (value: string) => {
+        clipboardViewState.keyword = value.trim();
       },
       { wait: 200 },
     );
@@ -192,7 +192,7 @@ const Header: FC = () => {
           className="min-w-0 flex-1"
           clearToken={searchClearToken}
           focusToken={searchFocusToken}
-          onChange={handleKeywordChange}
+          onValueChange={handleKeywordChange}
           placeholder={t("header.searchPlaceholder")}
           size="small"
         />

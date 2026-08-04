@@ -4,6 +4,7 @@
 //! macOS 走 NSPanel 自己接管键盘事件，无需本模块——故仅 windows target 启用。
 
 pub const NAV_EVENT: &str = "keyboard://nav";
+pub const SEARCH_INPUT_EVENT: &str = "keyboard://search-input";
 
 mod windows;
 pub use windows::{disable_navigation_keys, enable_navigation_keys};

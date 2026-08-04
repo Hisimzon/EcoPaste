@@ -5,6 +5,7 @@ pub mod init;
 pub mod items;
 pub mod models;
 pub mod path;
+pub mod pinyin;
 pub mod state;
 
 pub use init::init;

@@ -180,16 +180,16 @@ const Header: FC = () => {
 
   return (
     <div
-      className="flex items-center justify-between p-3 pb-2"
+      className="flex items-center gap-2 p-3 pb-2"
       data-tauri-drag-region
     >
       <img alt={t("header.logoAlt")} className="size-5" src="/logo.png" />
 
-      <div className="flex items-center gap-1">
+      <div className="flex min-w-0 flex-1 items-center gap-1">
         <SearchInput
           allowClear
           blurToken={searchBlurToken}
-          className="w-40"
+          className="min-w-0 flex-1"
           clearToken={searchClearToken}
           focusToken={searchFocusToken}
           onChange={handleKeywordChange}

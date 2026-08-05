@@ -33,6 +33,11 @@ const MENU_CHECK_FOR_UPDATES: &str = "tray::check_for_updates";
 const MENU_RELAUNCH: &str = "tray::relaunch";
 const MENU_EXIT: &str = "tray::exit";
 
+/// 托盘仍存在时，Windows 最后一个 WebView 销毁不应结束常驻进程。
+pub fn is_initialized(app: &AppHandle) -> bool {
+    app.tray_by_id(TRAY_ID).is_some()
+}
+
 pub fn init(app: &AppHandle, settings: &Settings) -> Result<()> {
     let lang = settings.appearance.language;
     let version = app.package_info().version.to_string();

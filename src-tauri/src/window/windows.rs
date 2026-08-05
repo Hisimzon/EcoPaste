@@ -2,8 +2,9 @@
 use tauri::AppHandle;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_TOP, SWP_FRAMECHANGED,
-    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, WS_EX_NOACTIVATE,
+    GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST,
+    SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
+    WS_EX_NOACTIVATE,
 };
 
 use super::{get_window, CLIPBOARD_WINDOW_LABEL};
@@ -16,13 +17,14 @@ pub fn show_window(app_handle: &AppHandle, label: &str) -> Result<()> {
         window
             .set_focusable(false)
             .map_err(|e| anyhow::anyhow!(e))?;
+        apply_no_activate(&window, true)?;
     }
 
     window.show().map_err(|e| anyhow::anyhow!(e))?;
     window.unminimize().map_err(|e| anyhow::anyhow!(e))?;
 
     if label == CLIPBOARD_WINDOW_LABEL {
-        apply_no_activate(&window, true)?;
+        show_without_activation(&window)?;
         keyboard::enable_navigation_keys(app_handle);
         mouse::enable_outside_click_hide(app_handle);
     } else {
@@ -63,9 +65,11 @@ pub fn hide_window(app_handle: &AppHandle, label: &str) -> Result<()> {
         if let Err(err) = window.set_focusable(false) {
             log::warn!("reset clipboard window focusable on hide failed: {err:?}");
         }
+        if let Err(err) = apply_no_activate(&window, true) {
+            log::warn!("reset clipboard window no-activate style on hide failed: {err:?}");
+        }
         keyboard::disable_navigation_keys();
         mouse::disable_outside_click_hide();
-        crate::menu::context_window::hide(app_handle);
     }
 
     Ok(())
@@ -89,12 +93,33 @@ fn apply_no_activate(window: &tauri::WebviewWindow, no_activate: bool) -> Result
 
         SetWindowPos(
             hwnd,
-            HWND_TOP,
+            HWND_TOPMOST,
             0,
             0,
             0,
             0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+        )
+        .map_err(|e| anyhow::anyhow!(e))?;
+    }
+
+    Ok(())
+}
+
+/// 在无激活样式已经生效后显示主窗口，避免快捷键呼出期间抢占前台窗口。
+fn show_without_activation(window: &tauri::WebviewWindow) -> Result<()> {
+    let raw_hwnd = window.hwnd().map_err(|e| anyhow::anyhow!(e))?;
+    let hwnd = HWND(raw_hwnd.0 as isize);
+
+    unsafe {
+        SetWindowPos(
+            hwnd,
+            HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
         )
         .map_err(|e| anyhow::anyhow!(e))?;
     }

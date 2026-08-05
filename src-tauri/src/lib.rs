@@ -131,11 +131,6 @@ pub fn run() {
             commands::reveal_clipboard_item,
             commands::show_window,
             commands::hide_window,
-            commands::show_context_submenu,
-            commands::hide_context_submenu,
-            commands::hide_context_menus,
-            commands::get_context_menu_payload,
-            commands::get_context_submenu_payload,
             commands::toggle_window,
             commands::notify_window_ready,
             commands::set_window_dirty,
@@ -242,9 +237,6 @@ pub fn run() {
 
             menu::clipboard_item::init(&handle);
 
-            #[cfg(target_os = "windows")]
-            menu::context_window::init(&handle);
-
             if !settings.onboarding.completed {
                 if let Err(err) = window::open_onboarding(&handle) {
                     log::error!("open onboarding window failed: {err:?}");
@@ -327,8 +319,17 @@ pub fn run() {
             }
 
             // 退出前保存所有窗口几何，兜住「调整大小后不关窗直接退出」的场景。
-            if let tauri::RunEvent::ExitRequested { .. } = event {
+            if let tauri::RunEvent::ExitRequested { code, api, .. } = event {
                 window::save_all_window_states(app_handle);
+
+                // Windows 最后一个 WebView 被轻量模式销毁时，Tauri 会发出 code=None
+                // 的退出请求。托盘仍存在则继续常驻；显式 exit/restart 带 code，正常放行。
+                #[cfg(target_os = "windows")]
+                if code.is_none() && tray::is_initialized(app_handle) {
+                    api.prevent_exit();
+                }
+                #[cfg(not(target_os = "windows"))]
+                let _ = (code, api);
             }
         });
 }

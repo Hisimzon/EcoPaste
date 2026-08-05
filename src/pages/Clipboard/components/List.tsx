@@ -42,6 +42,7 @@ import { WINDOW_LABEL } from "@/constants/windows";
 import { useClipboardItems } from "@/hooks/useClipboardItems";
 import { useKeyboardEvent } from "@/hooks/useKeyboardEvent";
 import { useTauriListen } from "@/hooks/useTauriListen";
+import ClipboardContextMenu from "@/pages/ContextMenu";
 import { clipboardStatsState } from "@/stores/clipboardStats";
 import { clipboardViewState } from "@/stores/clipboardView";
 import { settingsState } from "@/stores/settings";
@@ -61,7 +62,6 @@ import {
   useClipboardPreviewController,
 } from "../hooks/useClipboardPreviewController";
 import ClipboardCard from "./cards/ClipboardCard";
-import ClipboardContextMenu from "@/pages/ContextMenu";
 import NoteModal from "./NoteModal";
 
 /** 前 10 项的快捷键：index 0-8 对应 1-9，index 9 对应 0 */
@@ -151,12 +151,12 @@ const List: FC = () => {
   });
   const topItemCount = countLeadingPinnedItems(getItem);
   const {
-    closeHoverPreviewForScroll,
     closePreview,
     handleItemPointerEnter,
     handleItemPointerLeave,
     handleItemPointerMove,
     handleKeyboardPreviewMove,
+    handleListScrollingChange,
     handlePreviewAreaPointerLeave,
     handlePreviewSpaceDown,
     previewSession,
@@ -777,7 +777,6 @@ const List: FC = () => {
   }) => {
     setFirstVisibleIndex(startIndex);
 
-    closeHoverPreviewForScroll();
     loadRange(startIndex, endIndex);
   };
 
@@ -871,6 +870,7 @@ const List: FC = () => {
         atTopStateChange={handleAtTopStateChange}
         components={{ TopItemList }}
         computeItemKey={computeItemKey}
+        isScrolling={handleListScrollingChange}
         itemContent={renderItemContent}
         rangeChanged={handleRangeChanged}
         ref={virtuosoRef}

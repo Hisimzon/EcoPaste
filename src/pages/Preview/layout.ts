@@ -18,6 +18,7 @@ import {
   PREVIEW_PANEL_MAX_WIDTH,
   PREVIEW_PANEL_MIN_HEIGHT,
   PREVIEW_PANEL_MIN_WIDTH,
+  PREVIEW_TEXT_HORIZONTAL_PADDING,
   PREVIEW_TEXT_ROW_HEIGHT,
   PREVIEW_TEXT_SOFT_WRAP_CHARS,
   PREVIEW_TEXT_VERTICAL_PADDING,
@@ -218,7 +219,8 @@ function resolveTextPanelSize(
     PREVIEW_PANEL_MAX_HEIGHT,
     layout.panelRect.height,
   );
-  const rowCount = countTextPreviewRows(text);
+  const wrapChars = resolveTextWrapChars(maxPanelWidth);
+  const rowCount = countTextPreviewRows(text, wrapChars);
   const contentHeight =
     rowCount === 0
       ? PREVIEW_EMPTY_CONTENT_HEIGHT
@@ -232,6 +234,25 @@ function resolveTextPanelSize(
     ),
     width: clamp(maxPanelWidth, PREVIEW_PANEL_MIN_WIDTH, maxPanelWidth),
   };
+}
+
+/**
+ * 根据实际面板宽度扩展文本软切行长度，避免宽面板仍按最小宽度切行造成右侧大片空白。
+ */
+export function resolveTextWrapChars(panelWidth: number) {
+  const contentWidth = Math.max(
+    1,
+    panelWidth - PREVIEW_TEXT_HORIZONTAL_PADDING,
+  );
+  const minimumContentWidth =
+    PREVIEW_PANEL_MIN_WIDTH - PREVIEW_TEXT_HORIZONTAL_PADDING;
+
+  return Math.max(
+    1,
+    Math.floor(
+      (contentWidth / minimumContentWidth) * PREVIEW_TEXT_SOFT_WRAP_CHARS,
+    ),
+  );
 }
 
 /**
@@ -270,15 +291,12 @@ function resolveFilesPanelSize(
 /**
  * 统计虚拟文本行数，和 `TextViewer` 的软切块规则保持一致。
  */
-function countTextPreviewRows(text: string) {
+function countTextPreviewRows(text: string, wrapChars: number) {
   if (text.length === 0) return 0;
 
   let rowCount = 0;
   for (const line of text.split("\n")) {
-    rowCount += Math.max(
-      1,
-      Math.ceil(line.length / PREVIEW_TEXT_SOFT_WRAP_CHARS),
-    );
+    rowCount += Math.max(1, Math.ceil(line.length / wrapChars));
   }
 
   return rowCount;

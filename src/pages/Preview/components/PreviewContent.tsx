@@ -13,10 +13,10 @@ import VirtuosoScroller, {
   type VirtuosoScrollerChildrenProps,
 } from "@/components/VirtuosoScroller";
 import { cn } from "@/utils/cn";
-import { PREVIEW_TEXT_SOFT_WRAP_CHARS } from "../constants";
 
 export interface PreviewContentProps {
   payload: ClipboardPreviewPayload | null;
+  textWrapChars: number;
 }
 
 export interface PreviewHeaderProps {
@@ -25,6 +25,10 @@ export interface PreviewHeaderProps {
 
 interface PayloadViewerProps {
   payload: ClipboardPreviewPayload;
+}
+
+interface TextViewerProps extends PayloadViewerProps {
+  textWrapChars: number;
 }
 
 interface FilePreviewRowProps {
@@ -72,7 +76,7 @@ export const PreviewHeader: FC<PreviewHeaderProps> = (props) => {
  * 按 payload kind 分发到基础 viewer。
  */
 export const PreviewContent: FC<PreviewContentProps> = (props) => {
-  const { payload } = props;
+  const { payload, textWrapChars } = props;
   const { t } = useTranslation("preview");
 
   if (!payload) {
@@ -90,19 +94,19 @@ export const PreviewContent: FC<PreviewContentProps> = (props) => {
 
   if (payload.kind === "files") return <FilesViewer payload={payload} />;
 
-  return <TextViewer payload={payload} />;
+  return <TextViewer payload={payload} textWrapChars={textWrapChars} />;
 };
 
 /**
  * 文本预览：所有文本族内容都按纯文本虚拟行展示，避免长 HTML / RTF 构造大 DOM。
  */
-const TextViewer: FC<PayloadViewerProps> = (props) => {
-  const { payload } = props;
+const TextViewer: FC<TextViewerProps> = (props) => {
+  const { payload, textWrapChars } = props;
   const { t } = useTranslation("preview");
   const text = payload.text ?? "";
   const rows = useMemo(() => {
-    return buildTextPreviewRows(text);
-  }, [text]);
+    return buildTextPreviewRows(text, textWrapChars);
+  }, [text, textWrapChars]);
 
   if (text.length === 0) {
     return (
@@ -309,7 +313,7 @@ const FilePreviewRow: FC<FilePreviewRowProps> = (props) => {
 /**
  * 将长文本拆成虚拟行，超长单行按固定字符数软切块。
  */
-function buildTextPreviewRows(text: string) {
+function buildTextPreviewRows(text: string, wrapChars: number) {
   const rows: string[] = [];
 
   for (const line of text.split("\n")) {
@@ -318,12 +322,8 @@ function buildTextPreviewRows(text: string) {
       continue;
     }
 
-    for (
-      let start = 0;
-      start < line.length;
-      start += PREVIEW_TEXT_SOFT_WRAP_CHARS
-    ) {
-      rows.push(line.slice(start, start + PREVIEW_TEXT_SOFT_WRAP_CHARS));
+    for (let start = 0; start < line.length; start += wrapChars) {
+      rows.push(line.slice(start, start + wrapChars));
     }
   }
 

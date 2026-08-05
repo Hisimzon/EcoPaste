@@ -4,10 +4,9 @@
 //! 路径收口到这里。在 `window://visibility` 之外广播单一 `window://lifecycle` 事件
 //! （带 `phase` 字段），前端据此镜像每个窗口的生命周期阶段。
 //!
-//! 销毁策略：`DestroyWhenIdle` 窗口（当前为 preference 与 clipboard-preview）隐藏后
-//! 启动空闲计时器，超过用户设置的空闲秒数仍隐藏则销毁 WebView 释放资源；再次打开时
-//! 经 descriptor 的 `build` 重建（preference 走 `show_window`，preview 走预览模块按需 ensure
-//! 建窗）。`generation` 用于让「显示又隐藏」期间的过期计时器自动失效。
+//! 销毁策略：`DestroyWhenIdle` 窗口隐藏后启动空闲计时器，超过用户设置的空闲秒数
+//! 仍隐藏则销毁 WebView 释放资源；再次打开时经 descriptor 的 `build` 重建。
+//! `generation` 用于让「显示又隐藏」期间的过期计时器自动失效。
 
 mod descriptor;
 
@@ -22,13 +21,13 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::settings::SettingsStore;
 
-/// 非剪贴板窗口隐藏空闲超过此时长后销毁 WebView。
+/// 支持轻量销毁的窗口隐藏空闲超过此时长后销毁 WebView。
 pub const DEFAULT_IDLE_DESTROY_SECS: u64 = 60;
-/// 非剪贴板窗口最短销毁空闲时间，避免用户把窗口设置成近乎瞬时销毁导致重建闪烁。
+/// 最短销毁空闲时间，避免用户把窗口设置成近乎瞬时销毁导致重建闪烁。
 const MIN_IDLE_DESTROY_SECS: u64 = 5;
-/// 非剪贴板窗口最长销毁空闲时间，限制异常配置导致计时器长时间悬挂。
+/// 最长销毁空闲时间，限制异常配置导致计时器长时间悬挂。
 const MAX_IDLE_DESTROY_SECS: u64 = 24 * 60 * 60;
-/// 剪贴板窗口隐藏后进入 dormant 的宽限时间；剪贴板窗口不销毁，只暂停非必要工作。
+/// 剪贴板窗口隐藏后进入 dormant 的宽限时间；此阶段先暂停非必要工作，再等待空闲销毁。
 const CLIPBOARD_DORMANT_SECS: u64 = 5;
 /// 销毁前给前端保存草稿 / 申请 keepalive 的时间。
 const BEFORE_DESTROY_DEADLINE_MS: u64 = 500;
@@ -53,7 +52,7 @@ pub enum LifecyclePhase {
     HiddenWarm,
     /// 剪贴板窗口隐藏一小段时间后进入休眠：保留实例，但前端应暂停非必要刷新。
     Dormant,
-    /// 非剪贴板窗口空闲到期，已通知前端 before-destroy，等待最后保护状态确认。
+    /// 窗口空闲到期，已通知前端 before-destroy，等待最后保护状态确认。
     DestroyPending,
     /// WebView 已销毁，仅保留 descriptor；再次打开时重建。
     Destroyed,
@@ -62,7 +61,7 @@ pub enum LifecyclePhase {
 /// 单个窗口的运行时生命周期状态。
 struct RuntimeState {
     phase: LifecyclePhase,
-    /// 单调递增代次：每次从非可见状态进入 `Visible` 自增。空闲销毁计时器捕获进入
+    /// 单调递增代次：窗口重新显示或生命周期设置变化时自增。空闲销毁计时器捕获进入
     /// `HiddenWarm` 时的代次，到点若代次已变，说明计时器已过期，直接放弃销毁。
     generation: u64,
     hidden_at: Option<Instant>,
@@ -120,6 +119,16 @@ impl RuntimeState {
         }
 
         self.phase = phase;
+    }
+
+    /// 重新开始隐藏窗口的轻量计时，并让此前捕获旧代次的计时器全部失效。
+    fn restart_hidden_timer(&mut self, now: Instant) -> u64 {
+        self.generation += 1;
+        self.hidden_at = Some(now);
+        self.last_active_at = now;
+        self.phase = LifecyclePhase::HiddenWarm;
+
+        self.generation
     }
 
     /// 清理过期 keepalive，返回仍然有效的数量。
@@ -297,6 +306,45 @@ pub fn on_hidden(app: &AppHandle, label: &str, reason: &str) {
     }
 }
 
+/// 轻量模式开关或空闲秒数变化后，立即刷新所有已隐藏窗口的销毁计时。
+/// 关闭模式时只推进 generation 让旧计时器失效；开启时从设置变更时刻重新计时。
+pub fn refresh_lightweight_schedules(app: &AppHandle) {
+    let Some(manager) = manager(app) else {
+        return;
+    };
+    let enabled = lightweight_mode_enabled(app);
+    let timeout_secs = idle_destroy_secs(app);
+
+    for descriptor in descriptors() {
+        if descriptor.retain_policy != RetainPolicy::DestroyWhenIdle {
+            continue;
+        }
+        let Some(window) = app.get_webview_window(descriptor.label) else {
+            continue;
+        };
+        if window.is_visible().unwrap_or(false) {
+            continue;
+        }
+
+        let now = Instant::now();
+        let generation = manager.with_states(|states| {
+            states
+                .entry(descriptor.label.to_owned())
+                .or_insert_with(RuntimeState::new)
+                .restart_hidden_timer(now)
+        });
+
+        if !enabled {
+            continue;
+        }
+
+        schedule_idle_destroy(app, descriptor.label, generation, timeout_secs);
+        if descriptor.label == super::CLIPBOARD_WINDOW_LABEL {
+            schedule_clipboard_dormant(app, descriptor.label, generation);
+        }
+    }
+}
+
 /// 前端 ready handshake：标记窗口前端已完成基础初始化。
 pub fn on_ready(app: &AppHandle, label: &str) {
     if descriptor_for(label).is_none() {
@@ -324,6 +372,7 @@ pub fn on_ready(app: &AppHandle, label: &str) {
             log::debug!("window ready acknowledged without phase change: {label}");
         }
     }
+
 }
 
 /// 设置窗口 dirty owner；任一 owner 未清除时，空闲销毁会被延后。
@@ -471,8 +520,8 @@ fn snapshot_phase(state: &RuntimeState, has_window: bool) -> LifecyclePhase {
     state.phase
 }
 
-/// 取窗口的按需重建函数；非 `DestroyWhenIdle` 或未登记窗口返回 `None`。
-/// 供 `show_window` 在窗口已销毁时重建 WebView。
+/// 取窗口的建窗函数；未登记或未提供 builder 的窗口返回 `None`。
+/// 供窗口缺失时按 descriptor 恢复 WebView。
 pub fn rebuild_fn(label: &str) -> Option<fn(&AppHandle) -> crate::core::Result<()>> {
     descriptor_for(label).and_then(|descriptor| descriptor.build)
 }
@@ -536,8 +585,8 @@ fn schedule_idle_destroy(app: &AppHandle, label: &str, generation: u64, timeout_
     });
 }
 
-/// 计时器到点的销毁判定（主线程）：代次未变且仍处于 HiddenWarm 才进入 DestroyPending，
-/// 否则说明窗口已被重新显示或已销毁，放弃本次销毁。
+/// 计时器到点的销毁判定（主线程）：代次未变且仍处于可销毁的隐藏阶段才进入
+/// DestroyPending，否则说明窗口已被重新显示或已销毁，放弃本次销毁。
 fn try_destroy_idle(app: &AppHandle, label: &str, generation: u64) {
     if !lightweight_mode_enabled(app) {
         return;
@@ -549,7 +598,7 @@ fn try_destroy_idle(app: &AppHandle, label: &str, generation: u64) {
 
     let check = manager.with_states(|states| match states.get_mut(label) {
         Some(state) => {
-            if state.generation != generation || state.phase != LifecyclePhase::HiddenWarm {
+            if state.generation != generation || !is_idle_destroy_phase(label, state.phase) {
                 return DestroyCheck::Stale;
             }
 
@@ -574,6 +623,12 @@ fn try_destroy_idle(app: &AppHandle, label: &str, generation: u64) {
     manager.transition(app, label, LifecyclePhase::DestroyPending, "before-destroy");
     emit_before_destroy(app, label, generation);
     schedule_destroy_after_deadline(app, label, generation);
+}
+
+/// 主剪贴板窗口进入 dormant 后仍属于隐藏状态，必须允许既有空闲计时器继续销毁。
+fn is_idle_destroy_phase(label: &str, phase: LifecyclePhase) -> bool {
+    phase == LifecyclePhase::HiddenWarm
+        || (label == super::CLIPBOARD_WINDOW_LABEL && phase == LifecyclePhase::Dormant)
 }
 
 /// 广播销毁前事件，给前端保存草稿或申请 keepalive 的短暂窗口。
@@ -662,7 +717,6 @@ fn finish_destroy_idle(app: &AppHandle, label: &str, generation: u64) {
             let _ = panel.to_window();
         }
     }
-
     if let Some(window) = app.get_webview_window(label) {
         // 用 `destroy` 而非 `close`：close 会触发 `CloseRequested` 被 hide-on-close 拦截，
         // destroy 直接释放 WebView，绕过拦截。macOS 上 panel 窗口须先经上方 to_window 还原类，
@@ -683,7 +737,7 @@ fn lightweight_mode_enabled(app: &AppHandle) -> bool {
         .unwrap_or(true)
 }
 
-/// 从设置读取非剪贴板窗口空闲销毁秒数，并做边界收敛。
+/// 从设置读取窗口空闲销毁秒数，并做边界收敛。
 fn idle_destroy_secs(app: &AppHandle) -> u64 {
     app.try_state::<SettingsStore>()
         .map(|settings| {
@@ -708,6 +762,18 @@ mod tests {
         state.dirty_owners.clear();
 
         assert!(!state.destroy_blocked());
+    }
+
+    #[test]
+    fn clipboard_dormant_phase_remains_idle_destroyable() {
+        assert!(is_idle_destroy_phase(
+            super::super::CLIPBOARD_WINDOW_LABEL,
+            LifecyclePhase::Dormant
+        ));
+        assert!(!is_idle_destroy_phase(
+            "preference",
+            LifecyclePhase::Dormant
+        ));
     }
 
     #[test]

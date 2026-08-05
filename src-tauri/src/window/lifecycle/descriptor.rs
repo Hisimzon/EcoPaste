@@ -7,23 +7,16 @@
 use tauri::AppHandle;
 
 use super::super::{
-    build_onboarding_window, build_preference_window, build_update_window, preview,
+    build_clipboard_window, build_onboarding_window, build_preference_window,
+    build_update_window, preview,
     CLIPBOARD_PREVIEW_WINDOW_LABEL, CLIPBOARD_WINDOW_LABEL, ONBOARDING_WINDOW_LABEL,
     PREFERENCE_WINDOW_LABEL, UPDATE_WINDOW_LABEL,
 };
 use crate::core::Result;
 
-#[cfg(target_os = "windows")]
-use crate::menu::context_window::{
-    build_context_menu_window, build_context_submenu_window, CONTEXT_MENU_WINDOW_LABEL,
-    CONTEXT_SUBMENU_WINDOW_LABEL,
-};
-
 /// 窗口保留 / 销毁策略。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RetainPolicy {
-    /// 永久保留实例，隐藏后不销毁（main）。
-    Permanent,
     /// 隐藏空闲超过用户设置秒数后销毁 WebView，打开时重建。
     DestroyWhenIdle,
 }
@@ -32,7 +25,6 @@ impl RetainPolicy {
     /// 返回用于调试快照的稳定字面量。
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Permanent => "permanent",
             Self::DestroyWhenIdle => "destroyWhenIdle",
         }
     }
@@ -47,8 +39,7 @@ pub struct WindowDescriptor {
     pub emits_lifecycle: bool,
     /// 保留 / 销毁策略。
     pub retain_policy: RetainPolicy,
-    /// 按需重建函数。`DestroyWhenIdle` 窗口被销毁后由各自打开入口用它重新建窗；
-    /// `Permanent` 窗口无需重建，为 `None`。
+    /// 按需重建函数。窗口被销毁后由各自打开入口用它重新建窗。
     pub build: Option<fn(&AppHandle) -> Result<()>>,
 }
 
@@ -57,8 +48,8 @@ static DESCRIPTORS: &[WindowDescriptor] = &[
     WindowDescriptor {
         label: CLIPBOARD_WINDOW_LABEL,
         emits_lifecycle: true,
-        retain_policy: RetainPolicy::Permanent,
-        build: None,
+        retain_policy: RetainPolicy::DestroyWhenIdle,
+        build: Some(build_clipboard_window),
     },
     WindowDescriptor {
         label: PREFERENCE_WINDOW_LABEL,
@@ -83,20 +74,6 @@ static DESCRIPTORS: &[WindowDescriptor] = &[
         emits_lifecycle: true,
         retain_policy: RetainPolicy::DestroyWhenIdle,
         build: Some(preview::build_clipboard_preview_window),
-    },
-    #[cfg(target_os = "windows")]
-    WindowDescriptor {
-        label: CONTEXT_MENU_WINDOW_LABEL,
-        emits_lifecycle: true,
-        retain_policy: RetainPolicy::DestroyWhenIdle,
-        build: Some(build_context_menu_window),
-    },
-    #[cfg(target_os = "windows")]
-    WindowDescriptor {
-        label: CONTEXT_SUBMENU_WINDOW_LABEL,
-        emits_lifecycle: true,
-        retain_policy: RetainPolicy::DestroyWhenIdle,
-        build: Some(build_context_submenu_window),
     },
 ];
 

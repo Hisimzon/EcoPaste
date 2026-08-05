@@ -72,8 +72,6 @@ const WINDOW_LIFECYCLE_PHASE_LABEL_KEYS: Record<WindowLifecyclePhase, string> =
     visible: `${WINDOW_LIFECYCLE_I18N_PREFIX}.phases.visible`,
   };
 const WINDOW_LIFECYCLE_WINDOW_LABEL_KEYS: Record<string, string> = {
-  [WINDOW_LABEL.CONTEXT_MENU]: `${WINDOW_LIFECYCLE_I18N_PREFIX}.windows.contextMenu`,
-  [WINDOW_LABEL.CONTEXT_SUBMENU]: `${WINDOW_LIFECYCLE_I18N_PREFIX}.windows.contextSubmenu`,
   [WINDOW_LABEL.CLIPBOARD]: `${WINDOW_LIFECYCLE_I18N_PREFIX}.windows.clipboard`,
   [WINDOW_LABEL.ONBOARDING]: `${WINDOW_LIFECYCLE_I18N_PREFIX}.windows.onboarding`,
   [WINDOW_LABEL.PREFERENCE]: `${WINDOW_LIFECYCLE_I18N_PREFIX}.windows.preference`,

@@ -50,6 +50,14 @@ pub async fn update_settings(app: AppHandle, patch: serde_json::Value) -> Result
                 .is_some_and(|g| g.contains_key("runAsAdmin"))
         })
         .unwrap_or(false);
+    let touches_window_lifecycle = patch_obj
+        .and_then(|m| m.get("clipboard"))
+        .and_then(|v| v.as_object())
+        .and_then(|clipboard| clipboard.get("window"))
+        .and_then(|v| v.as_object())
+        .is_some_and(|window| {
+            window.contains_key("lightweightMode") || window.contains_key("idleDestroySeconds")
+        });
 
     let next = app.state::<SettingsStore>().update(patch)?;
 
@@ -67,6 +75,10 @@ pub async fn update_settings(app: AppHandle, patch: serde_json::Value) -> Result
 
     if touches_run_as_admin {
         admin::sync_scheduled_task(next.general.run_as_admin);
+    }
+
+    if touches_window_lifecycle {
+        window::lifecycle::refresh_lightweight_schedules(&app);
     }
 
     emit_settings_updated(&app, &next);
@@ -102,6 +114,8 @@ fn apply_reset_side_effects(app: &AppHandle, settings: &Settings) {
     if let Err(err) = window::show_taskbar_icon(app, settings.general.dock_icon) {
         log::warn!("reset taskbar icon failed: {err}");
     }
+
+    window::lifecycle::refresh_lightweight_schedules(app);
 
     admin::sync_scheduled_task(settings.general.run_as_admin);
 }

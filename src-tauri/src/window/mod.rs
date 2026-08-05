@@ -262,7 +262,7 @@ pub fn intercept_close_request(window: &Window) -> bool {
     true
 }
 
-/// 按需重建 preference 窗口。preference 不再由 Tauri 配置预创建（改为 `DestroyWhenIdle`），
+/// 按需重建非预创建窗口。窗口不再由 Tauri 配置预创建（改为 `DestroyWhenIdle`），
 /// 故所有选项必须在此用 builder 完整复刻原 `tauri.conf.json` 声明，否则重建后行为漂移。
 ///
 /// 建窗后保持 `visible: false`：由 [`show_window`] 统一走恢复几何 + 平台 show 流程，
@@ -298,6 +298,37 @@ pub fn build_preference_window(app_handle: &AppHandle) -> Result<()> {
     builder
         .build()
         .map_err(|err| anyhow::anyhow!("build preference window: {err}"))?;
+
+    Ok(())
+}
+
+/// 重建主剪贴板窗口。主窗口空闲销毁后仍需要保持与 `tauri.conf.json` 一致的窗口契约。
+pub fn build_clipboard_window(app_handle: &AppHandle) -> Result<()> {
+    if app_handle
+        .get_webview_window(CLIPBOARD_WINDOW_LABEL)
+        .is_some()
+    {
+        return Ok(());
+    }
+
+    WebviewWindowBuilder::new(
+        app_handle,
+        CLIPBOARD_WINDOW_LABEL,
+        WebviewUrl::App("index.html/#/".into()),
+    )
+    .title("EcoPaste")
+    .inner_size(360.0, 600.0)
+    .min_inner_size(360.0, 600.0)
+    .maximizable(false)
+    .skip_taskbar(true)
+    .always_on_top(true)
+    .accept_first_mouse(true)
+    .focusable(false)
+    .decorations(false)
+    .transparent(true)
+    .visible(false)
+    .build()
+    .map_err(|err| anyhow::anyhow!("build clipboard window: {err}"))?;
 
     Ok(())
 }

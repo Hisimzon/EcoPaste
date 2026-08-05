@@ -3,8 +3,7 @@ use tauri::AppHandle;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{
     GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST,
-    SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
-    WS_EX_NOACTIVATE,
+    SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, WS_EX_NOACTIVATE,
 };
 
 use super::{get_window, CLIPBOARD_WINDOW_LABEL};
@@ -45,7 +44,6 @@ pub fn set_clipboard_window_editing(app_handle: &AppHandle, editing: bool) -> Re
 
     if editing {
         keyboard::disable_navigation_keys();
-        mouse::disable_outside_click_hide();
         window.set_focus().map_err(|e| anyhow::anyhow!(e))?;
         return Ok(());
     }

@@ -1,7 +1,11 @@
 import type { DragEvent, FC, MouseEvent, PointerEvent, Ref } from "react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { popupClipboardItemMenu, startDragClipboardItem } from "@/commands";
+import {
+  type ContextMenuPayload,
+  popupClipboardItemMenu,
+  startDragClipboardItem,
+} from "@/commands";
 import AssetImage from "@/components/AssetImage";
 import KeyHint from "@/components/KeyHint";
 import type { ItemActionLabels } from "@/constants/itemActions";
@@ -41,6 +45,11 @@ interface ClipboardCardProps {
   onMouseDown?: (event: MouseEvent<HTMLDivElement>) => void;
   onAuxClick?: (event: MouseEvent<HTMLDivElement>) => void;
   onDoubleClick?: (event: MouseEvent<HTMLDivElement>) => void;
+  onContextMenuOpen?: (
+    payload: ContextMenuPayload,
+    x: number,
+    y: number,
+  ) => void;
   availableActions?: ClipboardAction[];
   quickActions?: ItemAction[];
   quickActionLabels?: ItemActionLabels;
@@ -69,6 +78,7 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
     onMouseDown,
     onAuxClick,
     onDoubleClick,
+    onContextMenuOpen,
     availableActions,
     quickActions = [],
     quickActionLabels,
@@ -106,13 +116,14 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
 
   const handleContextMenu = async (event: MouseEvent) => {
     event.preventDefault();
+    const { clientX, clientY } = event;
 
     const actions = availableActions ?? item.availableActions ?? [];
     const { isFavorite, isPinned, note } = item;
 
     if (actions.length === 0) return;
 
-    await popupClipboardItemMenu(
+    const payload = await popupClipboardItemMenu(
       item.id,
       [...actions],
       item.groupId,
@@ -120,6 +131,9 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
       isPinned,
       Boolean(note),
     );
+    if (!payload) return;
+
+    onContextMenuOpen?.(payload, clientX, clientY);
   };
 
   const handlePointerEnter = (event: PointerEvent<HTMLDivElement>) => {

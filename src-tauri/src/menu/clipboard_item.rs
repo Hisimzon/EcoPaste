@@ -4,9 +4,8 @@
 //!   弹出不会偷走前台焦点；菜单实例由 [`native::ClipboardItemMenuState`] 持有
 //!   到下次 popup 前替换，规避 tauri-apps/tauri#9470 的 muda use-after-free。
 //! - **Windows**：muda 的 `TrackPopupMenu` 必须把菜单 owner 拉到前台，会把用户
-//!   原本聚焦的目标 App（如资源管理器重命名编辑框）挤掉焦点。改用自定义
-//!   webview 窗（`focusable: false`，不偷焦点）实现，逻辑在
-//!   [`super::context_window`]。
+//!   原本聚焦的目标 App（如资源管理器重命名编辑框）挤掉焦点。因此 Rust 只返回
+//!   过滤、排序和本地化后的菜单 payload，由现有剪贴板 WebView 在窗口内部渲染。
 //!
 //! 业务侧（toast / 二次确认 modal / 列表本地镜像同步）仍在前端 `List.tsx`
 //! 维护，本模块只负责「弹菜单 + 点击后 emit `clipboard://menu-action` 给前端」。
@@ -154,6 +153,34 @@ pub struct PopupClipboardItemMenuInput {
     pub has_note: bool,
 }
 
+/// Windows 主窗口内分组选择面板的一行。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextMenuGroupPayload {
+    pub checked: bool,
+    pub id: String,
+    pub label: String,
+}
+
+/// Windows 主窗口内右键菜单的一行。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextMenuItemPayload {
+    pub action: ClipboardMenuAction,
+    pub label: String,
+    pub accelerator: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<ContextMenuGroupPayload>,
+}
+
+/// Windows 主窗口渲染右键菜单所需的完整 payload。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextMenuPayload {
+    pub item_id: String,
+    pub groups: Vec<Vec<ContextMenuItemPayload>>,
+}
+
 /// 构建右键菜单所需的完整上下文，包含命令参数与实时读取的分组列表。
 #[derive(Debug, Clone)]
 pub(super) struct ClipboardItemMenuRequest {
@@ -164,6 +191,76 @@ pub(super) struct ClipboardItemMenuRequest {
     pub is_favorite: bool,
     pub is_pinned: bool,
     pub has_note: bool,
+}
+
+/// 构建 Windows 主窗口内菜单 payload；动作过滤、排序和文案继续由 Rust 负责。
+#[cfg(target_os = "windows")]
+fn build_context_menu_payload(
+    app: &AppHandle,
+    request: &ClipboardItemMenuRequest,
+) -> Option<ContextMenuPayload> {
+    let lang = crate::i18n::current_language(app);
+    let mut active = request.available_actions.clone();
+    if !request.groups.is_empty() {
+        active.push(ClipboardMenuAction::MoveToGroup);
+    }
+
+    let groups = ACTION_GROUPS
+        .iter()
+        .map(|group| {
+            group
+                .iter()
+                .filter(|action| active.contains(action))
+                .map(|action| ContextMenuItemPayload {
+                    action: *action,
+                    label: action
+                        .label(
+                            lang,
+                            request.is_favorite,
+                            request.is_pinned,
+                            request.has_note,
+                        )
+                        .into(),
+                    accelerator: action.accelerator().map(String::from),
+                    groups: build_context_menu_groups(
+                        *action,
+                        &request.groups,
+                        request.current_group_id.as_deref(),
+                    ),
+                })
+                .collect::<Vec<_>>()
+        })
+        .filter(|group| !group.is_empty())
+        .collect::<Vec<_>>();
+
+    if groups.is_empty() {
+        return None;
+    }
+
+    Some(ContextMenuPayload {
+        item_id: request.item_id.clone(),
+        groups,
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn build_context_menu_groups(
+    action: ClipboardMenuAction,
+    groups: &[ClipboardMenuGroup],
+    current_group_id: Option<&str>,
+) -> Vec<ContextMenuGroupPayload> {
+    if action != ClipboardMenuAction::MoveToGroup {
+        return Vec::new();
+    }
+
+    groups
+        .iter()
+        .map(|group| ContextMenuGroupPayload {
+            checked: current_group_id == Some(group.id.as_str()),
+            id: group.id.clone(),
+            label: group.name.clone(),
+        })
+        .collect()
 }
 
 /// 菜单点击后 emit 给前端的 payload。Windows 自定义菜单窗也复用这个结构发回
@@ -476,8 +573,7 @@ mod native {
 // 跨平台入口
 // ============================================================================
 
-/// setup 阶段调用：macOS 注册 muda 菜单状态；Windows 由 [`super::context_window::init`]
-/// 单独建窗，这里 no-op。
+/// setup 阶段调用：macOS 注册 muda 菜单状态；Windows 菜单在现有主 WebView 内渲染。
 #[allow(unused_variables)]
 pub fn init(app: &AppHandle) {
     #[cfg(target_os = "macos")]
@@ -491,7 +587,7 @@ pub async fn popup_clipboard_item_menu(
     app: AppHandle,
     db: State<'_, DatabaseState>,
     input: PopupClipboardItemMenuInput,
-) -> Result<()> {
+) -> Result<Option<ContextMenuPayload>> {
     let pool = db.pool().await;
     let groups = crate::db::groups::list_groups(&pool)
         .await?
@@ -514,12 +610,14 @@ pub async fn popup_clipboard_item_menu(
 
     #[cfg(target_os = "macos")]
     {
-        native::popup(&app, request)
+        native::popup(&app, request)?;
+
+        Ok(None)
     }
 
     #[cfg(target_os = "windows")]
     {
-        super::context_window::show_for_clipboard_item(&app, &request)
+        Ok(build_context_menu_payload(&app, &request))
     }
 }
 

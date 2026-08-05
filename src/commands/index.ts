@@ -44,14 +44,7 @@ export interface PreviewAnchorRect {
   height: number;
 }
 
-export interface ContextSubmenuAnchor {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
-
-export interface ContextSubmenuGroupInput {
+export interface ContextMenuGroupPayload {
   checked: boolean;
   id: string;
   label: string;
@@ -61,21 +54,12 @@ export interface ContextMenuItemPayload {
   action: ClipboardAction;
   label: string;
   accelerator: string | null;
-  groups?: ContextSubmenuGroupInput[];
+  groups?: ContextMenuGroupPayload[];
 }
 
-export interface ContextMenuShowPayload {
+export interface ContextMenuPayload {
   itemId: string;
-  isFavorite: boolean;
-  isPinned: boolean;
   groups: Array<Array<ContextMenuItemPayload>>;
-}
-
-export interface ShowContextSubmenuInput {
-  action: ClipboardAction;
-  anchor: ContextSubmenuAnchor;
-  groups: ContextSubmenuGroupInput[];
-  itemId: string;
 }
 
 export interface ClipboardPreviewState {
@@ -1381,13 +1365,8 @@ export const playCopySound = () => {
 };
 
 /**
- * 在剪贴板窗口当前光标处弹出列表项右键菜单（菜单实例由 Rust 持有）。
- *
- * 点击菜单项后 Rust 会 emit `clipboard://menu-action` 携带 `{action, itemId}`，
- * 由 `List.tsx` 单点订阅后派发到既有处理逻辑（toast / 确认 modal / 本地镜像同步）。
- *
- * 把菜单生命周期搬到 Rust 是为了规避 tauri-apps/tauri#9470：前端 `Menu.new` 在
- * `popup` 后立即被 GC 会导致 Windows muda 点击崩溃/卡顿。
+ * 请求列表项右键菜单。macOS 由 Rust 弹出原生菜单并返回 null；Windows 返回
+ * Rust 过滤、排序和本地化后的 payload，交给现有剪贴板 WebView 渲染。
  */
 export const popupClipboardItemMenu = (
   itemId: string,
@@ -1397,7 +1376,7 @@ export const popupClipboardItemMenu = (
   isPinned: boolean,
   hasNote: boolean,
 ) => {
-  return call<void>(
+  return call<ContextMenuPayload | null>(
     TAURI_COMMAND.POPUP_CLIPBOARD_ITEM_MENU,
     "commands:labels.openMenu",
     {
@@ -1411,70 +1390,4 @@ export const popupClipboardItemMenu = (
       },
     },
   );
-};
-
-/**
- * 读取 Windows 自定义右键菜单一级窗口的待渲染 payload。
- * 窗口被自动销毁后重建时用于首屏补拉，失败只记录日志。
- */
-export const getContextMenuPayload = async () => {
-  try {
-    return await invoke<ContextMenuShowPayload | null>(
-      TAURI_COMMAND.GET_CONTEXT_MENU_PAYLOAD,
-    );
-  } catch (error) {
-    log.error("get context menu payload failed", toAppError(error));
-
-    return null;
-  }
-};
-
-/**
- * 读取 Windows 自定义右键菜单二级窗口的待渲染 payload。
- * 窗口被自动销毁后重建时用于首屏补拉，失败只记录日志。
- */
-export const getContextSubmenuPayload = async () => {
-  try {
-    return await invoke<ShowContextSubmenuInput | null>(
-      TAURI_COMMAND.GET_CONTEXT_SUBMENU_PAYLOAD,
-    );
-  } catch (error) {
-    log.error("get context submenu payload failed", toAppError(error));
-
-    return null;
-  }
-};
-
-/**
- * 显示 Windows 自定义右键菜单的二级窗口。
- * 内部菜单生命周期命令失败只记日志，避免 hover 过程中打扰用户。
- */
-export const showContextSubmenu = async (input: ShowContextSubmenuInput) => {
-  try {
-    await invoke<void>(TAURI_COMMAND.SHOW_CONTEXT_SUBMENU, { input });
-  } catch (error) {
-    log.error("show context submenu failed", toAppError(error));
-  }
-};
-
-/**
- * 隐藏 Windows 自定义右键菜单的二级窗口。
- */
-export const hideContextSubmenu = async () => {
-  try {
-    await invoke<void>(TAURI_COMMAND.HIDE_CONTEXT_SUBMENU);
-  } catch (error) {
-    log.error("hide context submenu failed", toAppError(error));
-  }
-};
-
-/**
- * 隐藏 Windows 自定义右键菜单的一级和二级窗口。
- */
-export const hideContextMenus = async () => {
-  try {
-    await invoke<void>(TAURI_COMMAND.HIDE_CONTEXT_MENUS);
-  } catch (error) {
-    log.error("hide context menus failed", toAppError(error));
-  }
 };

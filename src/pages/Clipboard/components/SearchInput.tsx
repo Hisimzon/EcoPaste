@@ -3,8 +3,8 @@ import type { ChangeEvent, CompositionEvent, FC } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import KeyHint from "@/components/KeyHint";
 import { TAURI_EVENT } from "@/constants/events";
-import { useTauriListen } from "@/hooks/useTauriListen";
 import { prepareClipboardWindowEditableFocus } from "@/hooks/useClipboardWindowEditableFocus";
+import { useTauriListen } from "@/hooks/useTauriListen";
 import { isWinClipboardWindow } from "@/utils/is";
 
 interface SearchInputEvent {
@@ -21,17 +21,20 @@ interface SearchInputProps
 }
 
 /**
- * Windows 剪贴板窗口不获取焦点：搜索内容由 Rust 低级键盘钩子驱动。
- * macOS 继续使用 WebView 原生输入和 IME。
+ * Windows 快捷键呼出时由 Rust 低级键盘钩子驱动搜索；用户手动点击输入框后临时启用原生输入和 IME。
+ * macOS 始终使用 WebView 原生输入。
  */
 const SearchInput: FC<SearchInputProps> = (props) => {
   const {
     blurToken = 0,
     clearToken = 0,
     focusToken = 0,
+    onBlur,
     onClear,
     onCompositionEnd,
     onCompositionStart,
+    onFocus,
+    onMouseDown,
     onValueChange,
     ...rest
   } = props;
@@ -39,7 +42,9 @@ const SearchInput: FC<SearchInputProps> = (props) => {
   const inputRef = useRef<InputRef>(null);
   const composingRef = useRef(false);
   const replaceNextRef = useRef(false);
+  const [manualEditing, setManualEditing] = useState(false);
   const [value, setValue] = useState("");
+  const usesVirtualInput = isWindowsNoFocus && !manualEditing;
 
   const updateValue = useCallback(
     (nextValue: string) => {
@@ -50,7 +55,7 @@ const SearchInput: FC<SearchInputProps> = (props) => {
   );
 
   useTauriListen<SearchInputEvent>(TAURI_EVENT.SEARCH_INPUT, (event) => {
-    if (!isWindowsNoFocus) return;
+    if (!usesVirtualInput) return;
 
     const { action, text = "" } = event.payload;
     if (action === "replace") {
@@ -75,20 +80,20 @@ const SearchInput: FC<SearchInputProps> = (props) => {
   const focusSearch = useCallback(async () => {
     if (!inputRef.current) return;
 
-    if (isWindowsNoFocus) {
+    if (usesVirtualInput) {
       replaceNextRef.current = true;
       return;
     }
 
     await prepareClipboardWindowEditableFocus();
     inputRef.current.focus({ cursor: "all" });
-  }, [isWindowsNoFocus]);
+  }, [usesVirtualInput]);
 
   useEffect(() => {
-    if (blurToken <= 0 || isWindowsNoFocus) return;
+    if (blurToken <= 0 || usesVirtualInput) return;
 
     inputRef.current?.blur();
-  }, [blurToken, isWindowsNoFocus]);
+  }, [blurToken, usesVirtualInput]);
 
   useEffect(() => {
     if (clearToken <= 0) return;
@@ -134,15 +139,50 @@ const SearchInput: FC<SearchInputProps> = (props) => {
     onClear?.();
   };
 
+  const activateManualSearch = async () => {
+    await prepareClipboardWindowEditableFocus();
+
+    requestAnimationFrame(() => {
+      inputRef.current?.focus({ cursor: "end" });
+    });
+  };
+
+  const handleMouseDown: NonNullable<InputProps["onMouseDown"]> = (event) => {
+    onMouseDown?.(event);
+
+    if (!isWindowsNoFocus) return;
+    if (event.defaultPrevented) return;
+    if (event.button !== 0 || !event.nativeEvent.isTrusted) return;
+
+    event.preventDefault();
+    setManualEditing(true);
+    void activateManualSearch();
+  };
+
+  const handleFocus: NonNullable<InputProps["onFocus"]> = (event) => {
+    if (isWindowsNoFocus) setManualEditing(true);
+
+    onFocus?.(event);
+  };
+
+  const handleBlur: NonNullable<InputProps["onBlur"]> = (event) => {
+    if (isWindowsNoFocus) setManualEditing(false);
+
+    onBlur?.(event);
+  };
+
   return (
     <Input
       autoCapitalize="off"
       autoCorrect="off"
       data-allow-global-keyboard="true"
+      onBlur={handleBlur}
       onChange={handleChange}
       onClear={handleClear}
       onCompositionEnd={handleCompositionEnd}
       onCompositionStart={handleCompositionStart}
+      onFocus={handleFocus}
+      onMouseDown={handleMouseDown}
       prefix={
         <KeyHint
           hintKey="F"
@@ -153,15 +193,8 @@ const SearchInput: FC<SearchInputProps> = (props) => {
       ref={inputRef}
       spellCheck={false}
       {...rest}
-      onMouseDown={
-        isWindowsNoFocus
-          ? (event) => {
-              event.preventDefault();
-            }
-          : rest.onMouseDown
-      }
-      readOnly={isWindowsNoFocus}
-      tabIndex={isWindowsNoFocus ? -1 : rest.tabIndex}
+      readOnly={usesVirtualInput}
+      tabIndex={usesVirtualInput ? -1 : rest.tabIndex}
       value={value}
     />
   );

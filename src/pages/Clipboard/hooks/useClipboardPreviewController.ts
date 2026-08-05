@@ -52,6 +52,7 @@ export function useClipboardPreviewController(
   );
   const hoverTimerRef = useRef<number | null>(null);
   const hoverHideTimerRef = useRef<number | null>(null);
+  const listScrollingRef = useRef(false);
   const clipboardWindowVisibleRef = useRef(true);
   const previewSessionRef = useRef<PreviewSession | null>(null);
   const previewOpenRequestIdRef = useRef(0);
@@ -160,6 +161,8 @@ export function useClipboardPreviewController(
     item: ClipboardItem,
     event: ReactPointerEvent<HTMLDivElement>,
   ) => {
+    if (listScrollingRef.current) return;
+
     const pointerY = event.clientY;
 
     onHoverSelect(item.id);
@@ -211,6 +214,8 @@ export function useClipboardPreviewController(
     item: ClipboardItem,
     event: ReactPointerEvent<HTMLDivElement>,
   ) => {
+    if (listScrollingRef.current) return;
+
     const pointerY = event.clientY;
 
     if (hoverTimerRef.current !== null) {
@@ -245,6 +250,8 @@ export function useClipboardPreviewController(
    * Hover 离开单个卡片时进入准备隐藏状态；进入新卡片会取消隐藏。
    */
   const handleItemPointerLeave = () => {
+    if (listScrollingRef.current) return;
+
     scheduleHoverHide("itemPointerLeave");
   };
 
@@ -340,6 +347,15 @@ export function useClipboardPreviewController(
     }
 
     cancelHoverPreview();
+  };
+
+  /**
+   * Virtuoso 滚动期间暂停 hover 选中与预览，避免条目经过静止鼠标时反复触发渲染和 IPC。
+   */
+  const handleListScrollingChange = (scrolling: boolean) => {
+    listScrollingRef.current = scrolling;
+
+    if (scrolling) closeHoverPreviewForScroll();
   };
 
   /**
@@ -551,12 +567,12 @@ export function useClipboardPreviewController(
   }
 
   return {
-    closeHoverPreviewForScroll,
     closePreview,
     handleItemPointerEnter,
     handleItemPointerLeave,
     handleItemPointerMove,
     handleKeyboardPreviewMove,
+    handleListScrollingChange,
     handlePreviewAreaPointerLeave,
     handlePreviewSpaceDown,
     previewSession,

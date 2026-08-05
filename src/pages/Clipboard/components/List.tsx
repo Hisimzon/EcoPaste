@@ -15,6 +15,7 @@ import {
 } from "react-virtuoso";
 import { useSnapshot } from "valtio";
 import {
+  type ContextMenuPayload,
   deleteClipboardItem,
   hideWindow,
   listClipboardGroups,
@@ -60,6 +61,7 @@ import {
   useClipboardPreviewController,
 } from "../hooks/useClipboardPreviewController";
 import ClipboardCard from "./cards/ClipboardCard";
+import ClipboardContextMenu from "@/pages/ContextMenu";
 import NoteModal from "./NoteModal";
 
 /** 前 10 项的快捷键：index 0-8 对应 1-9，index 9 对应 0 */
@@ -79,6 +81,12 @@ interface ClipboardMenuActionPayload {
   itemId: string;
 }
 
+interface ClipboardContextMenuState {
+  payload: ContextMenuPayload;
+  x: number;
+  y: number;
+}
+
 /**
  * 剪贴板历史列表：虚拟滚动 + 分类型卡片 + 可视范围分页加载，
  * 跟随关键词（Header 已防抖）检索。
@@ -90,6 +98,8 @@ const List: FC = () => {
   const [isModifierPressed, setIsModifierPressed] = useState(false);
   const [customGroups, setCustomGroups] = useState<ClipboardGroupRecord[]>([]);
   const [noteTarget, setNoteTarget] = useState<ClipboardItem | null>(null);
+  const [contextMenu, setContextMenu] =
+    useState<ClipboardContextMenuState | null>(null);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const isAtTopRef = useRef(true);
   const itemElementMapRef = useRef(new Map<string, HTMLDivElement>());
@@ -288,7 +298,10 @@ const List: FC = () => {
     if (label !== WINDOW_LABEL.CLIPBOARD) return;
 
     clipboardWindowVisibleRef.current = visible;
-    if (!visible) return;
+    if (!visible) {
+      setContextMenu(null);
+      return;
+    }
 
     const {
       scrollToTopOnOpen,
@@ -584,6 +597,33 @@ const List: FC = () => {
 
   useTauriListen(TAURI_EVENT.CLIPBOARD_MENU_ACTION, handleMenuActionEvent);
 
+  const handleContextMenuOpen = (
+    payload: ContextMenuPayload,
+    x: number,
+    y: number,
+  ) => {
+    setSelectedId(payload.itemId);
+    setContextMenu({ payload, x, y });
+  };
+
+  const handleContextMenuClose = () => {
+    setContextMenu(null);
+  };
+
+  const handleContextMenuPick = (
+    action: ClipboardAction,
+    targetGroupId?: string,
+  ) => {
+    if (!contextMenu) return;
+
+    handleMenuActionRef.current({
+      action,
+      groupId: targetGroupId,
+      itemId: contextMenu.payload.itemId,
+    });
+    setContextMenu(null);
+  };
+
   const handleKeyDown = (event: KeyboardEvent) => {
     const eventModifierPressed = isMac ? event.metaKey : event.ctrlKey;
 
@@ -807,6 +847,14 @@ const List: FC = () => {
     >
       <VirtuosoScroller>{renderVirtuoso}</VirtuosoScroller>
 
+      <ClipboardContextMenu
+        onClose={handleContextMenuClose}
+        onPick={handleContextMenuPick}
+        payload={contextMenu?.payload ?? null}
+        x={contextMenu?.x ?? 0}
+        y={contextMenu?.y ?? 0}
+      />
+
       <NoteModal
         item={noteTarget}
         onClose={handleCloseNote}
@@ -1019,6 +1067,7 @@ const List: FC = () => {
           }
           item={item}
           onAuxClick={handleAuxClick}
+          onContextMenuOpen={handleContextMenuOpen}
           onDoubleClick={handleDoubleClick}
           onMouseDown={handleMouseDown}
           onOpenLink={handleOpenLink}
@@ -1092,6 +1141,11 @@ const List: FC = () => {
    * ESC 按预览、分组、分类、窗口的顺序逐层退出。
    */
   function closeTopEscapeLayer() {
+    if (contextMenu !== null) {
+      setContextMenu(null);
+      return;
+    }
+
     if (previewSession !== null) {
       closePreview("escape");
       return;

@@ -1,311 +1,195 @@
-import { emitTo } from "@tauri-apps/api/event";
-import { useEventListener, useMount } from "ahooks";
 import {
   type FC,
   Fragment,
   type MouseEvent,
-  type PointerEvent,
-  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
   useState,
 } from "react";
-import {
-  type ContextMenuShowPayload,
-  type ContextSubmenuGroupInput,
-  getContextMenuPayload,
-  getContextSubmenuPayload,
-  hideContextMenus,
-  hideContextSubmenu,
-  type ShowContextSubmenuInput,
-  showContextSubmenu,
+import type {
+  ContextMenuItemPayload,
+  ContextMenuPayload,
 } from "@/commands";
-import { TAURI_EVENT } from "@/constants/events";
-import { WINDOW_LABEL } from "@/constants/windows";
-import { useTauriListen } from "@/hooks/useTauriListen";
 import type { ClipboardAction } from "@/types/clipboard";
 import { cn } from "@/utils/cn";
 import { formatShortcutDisplay } from "@/utils/shortcut";
 
-interface MenuSurfaceProps {
-  children: ReactNode;
+interface ClipboardContextMenuProps {
+  payload: ContextMenuPayload | null;
+  x: number;
+  y: number;
+  onClose: () => void;
+  onPick: (action: ClipboardAction, groupId?: string) => void;
 }
 
-interface BeforeDestroyPayload {
-  label: string;
+interface MenuPosition {
+  left: number;
+  top: number;
 }
+
+const VIEWPORT_MARGIN = 8;
 
 /**
- * Renders the menu surface flush to the transparent webview bounds.
+ * 在剪贴板主 WebView 内渲染 Windows 右键菜单，避免创建额外 WebView2 窗口。
+ * 分组选择使用同一面板切换，保证 360px 窄窗口内不会横向溢出。
  */
-const MenuSurface: FC<MenuSurfaceProps> = (props) => {
-  const { children } = props;
+const ClipboardContextMenu: FC<ClipboardContextMenuProps> = (props) => {
+  const { payload, x, y, onClose, onPick } = props;
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [activeSubmenu, setActiveSubmenu] =
+    useState<ContextMenuItemPayload | null>(null);
+  const [position, setPosition] = useState<MenuPosition>({ left: x, top: y });
+
+  useEffect(() => {
+    setActiveSubmenu(null);
+  }, [payload]);
+
+  useEffect(() => {
+    if (!payload) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (menuRef.current?.contains(event.target as Node)) return;
+
+      onClose();
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown, true);
+
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown, true);
+    };
+  }, [onClose, payload]);
+
+  useLayoutEffect(() => {
+    if (!payload || !menuRef.current) return;
+
+    const bounds = menuRef.current.getBoundingClientRect();
+    const maxLeft = Math.max(
+      VIEWPORT_MARGIN,
+      window.innerWidth - bounds.width - VIEWPORT_MARGIN,
+    );
+    const maxTop = Math.max(
+      VIEWPORT_MARGIN,
+      window.innerHeight - bounds.height - VIEWPORT_MARGIN,
+    );
+
+    setPosition({
+      left: Math.min(Math.max(VIEWPORT_MARGIN, x), maxLeft),
+      top: Math.min(Math.max(VIEWPORT_MARGIN, y), maxTop),
+    });
+  }, [activeSubmenu, payload, x, y]);
+
+  if (!payload) return null;
+
+  const handleMenuContext = (event: MouseEvent) => {
+    event.preventDefault();
+  };
+
+  const handleBack = () => {
+    setActiveSubmenu(null);
+  };
+
+  const handleItemClick = (item: ContextMenuItemPayload) => {
+    if (item.groups && item.groups.length > 0) {
+      setActiveSubmenu(item);
+      return;
+    }
+
+    onPick(item.action);
+  };
 
   return (
-    <div className="fixed inset-0 box-border overflow-hidden">
-      <div className="box-border h-full w-full select-none rounded-2 border border-ant-border-secondary bg-ant-elevated p-1 shadow-lg">
-        {children}
-      </div>
+    <div
+      className="fixed z-50 box-border max-h-100 w-55 select-none overflow-y-auto rounded-2 border border-ant-border-secondary bg-ant-elevated p-1 shadow-lg"
+      onContextMenu={handleMenuContext}
+      ref={menuRef}
+      role="menu"
+      style={position}
+    >
+      {activeSubmenu ? (
+        <>
+          <button
+            className="flex h-8 w-full items-center gap-2 rounded-1.5 px-2 text-left text-ant-secondary text-sm hover:bg-ant-fill-secondary"
+            onClick={handleBack}
+            type="button"
+          >
+            <i aria-hidden="true" className="i-lucide:chevron-left size-4" />
+            <span className="truncate">{activeSubmenu.label}</span>
+          </button>
+          <div className="my-1 h-px bg-ant-split" />
+          {activeSubmenu.groups?.map((group) => {
+            const handleGroupClick = () => {
+              onPick(activeSubmenu.action, group.id);
+            };
+
+            return (
+              <button
+                aria-checked={group.checked}
+                className="flex h-8 w-full items-center gap-2 rounded-1.5 px-2 text-left text-ant-text text-sm hover:bg-ant-fill-secondary"
+                key={group.id}
+                onClick={handleGroupClick}
+                role="menuitemradio"
+                type="button"
+              >
+                <i
+                  aria-hidden="true"
+                  className={cn("size-4", {
+                    "i-lucide:check": group.checked,
+                  })}
+                />
+                <span className="min-w-0 flex-1 truncate">{group.label}</span>
+              </button>
+            );
+          })}
+        </>
+      ) : (
+        payload.groups.map((group, groupIndex) => {
+          return (
+            // biome-ignore lint/suspicious/noArrayIndexKey: backend-defined group order is stable.
+            <Fragment key={groupIndex}>
+              {groupIndex > 0 ? (
+                <div className="my-1 h-px bg-ant-split" />
+              ) : null}
+              {group.map((item) => {
+                const handleClick = () => {
+                  handleItemClick(item);
+                };
+
+                return (
+                  <button
+                    className={cn(
+                      "flex h-8 w-full items-center gap-2 rounded-1.5 px-2 text-left text-ant-text text-sm hover:bg-ant-fill-secondary",
+                      {
+                        "text-ant-error": item.action === "delete",
+                      },
+                    )}
+                    key={item.action}
+                    onClick={handleClick}
+                    role="menuitem"
+                    type="button"
+                  >
+                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                    {item.accelerator ? (
+                      <span className="shrink-0 text-ant-quaternary text-xs">
+                        {formatShortcutDisplay(item.accelerator)}
+                      </span>
+                    ) : null}
+                    {item.groups && item.groups.length > 0 ? (
+                      <i
+                        aria-hidden="true"
+                        className="i-lucide:chevron-right size-4 shrink-0 text-ant-quaternary"
+                      />
+                    ) : null}
+                  </button>
+                );
+              })}
+            </Fragment>
+          );
+        })
+      )}
     </div>
   );
 };
 
-/**
- * Renders the root Windows custom context menu window.
- */
-const ContextMenu: FC = () => {
-  const [payload, setPayload] = useState<ContextMenuShowPayload | null>(null);
-  const [activeSubmenuAction, setActiveSubmenuAction] =
-    useState<ClipboardAction | null>(null);
-
-  useTauriListen<ContextMenuShowPayload>(
-    TAURI_EVENT.CONTEXT_MENU_SHOW,
-    (event) => {
-      setPayload(event.payload);
-      setActiveSubmenuAction(null);
-    },
-  );
-
-  const handleBeforeDestroy = (event: { payload: BeforeDestroyPayload }) => {
-    if (event.payload.label !== WINDOW_LABEL.CONTEXT_MENU) return;
-
-    setPayload(null);
-    setActiveSubmenuAction(null);
-  };
-
-  useTauriListen<BeforeDestroyPayload>(
-    TAURI_EVENT.WINDOW_BEFORE_DESTROY,
-    handleBeforeDestroy,
-  );
-
-  useMount(async () => {
-    const latestPayload = await getContextMenuPayload();
-    if (!latestPayload) return;
-
-    setPayload(latestPayload);
-    setActiveSubmenuAction(null);
-  });
-
-  useEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
-
-    void hideContextMenus();
-  });
-
-  const handlePick = async (action: ClipboardAction) => {
-    if (!payload) return;
-
-    await emitTo(WINDOW_LABEL.CLIPBOARD, TAURI_EVENT.CLIPBOARD_MENU_ACTION, {
-      action,
-      itemId: payload.itemId,
-    });
-
-    await hideContextMenus();
-  };
-
-  const openSubmenu = (input: ShowContextSubmenuInput) => {
-    setActiveSubmenuAction(input.action);
-    void showContextSubmenu(input);
-  };
-
-  const closeSubmenu = () => {
-    setActiveSubmenuAction(null);
-    void hideContextSubmenu();
-  };
-
-  if (!payload) return null;
-
-  return (
-    <MenuSurface>
-      {payload.groups.map((group, groupIndex) => {
-        return (
-          // biome-ignore lint/suspicious/noArrayIndexKey: backend-defined group order is stable.
-          <Fragment key={groupIndex}>
-            {groupIndex > 0 && <div className="my-1 h-px bg-ant-split" />}
-            {group.map((item) => {
-              return (
-                <ContextMenuItem
-                  accelerator={item.accelerator}
-                  action={item.action}
-                  groups={item.groups ?? []}
-                  isActive={activeSubmenuAction === item.action}
-                  isDanger={item.action === "delete"}
-                  itemId={payload.itemId}
-                  key={item.action}
-                  label={item.label}
-                  onCloseSubmenu={closeSubmenu}
-                  onOpenSubmenu={openSubmenu}
-                  onPick={handlePick}
-                />
-              );
-            })}
-          </Fragment>
-        );
-      })}
-    </MenuSurface>
-  );
-};
-
-interface ContextMenuItemProps {
-  accelerator: string | null;
-  action: ClipboardAction;
-  groups: ContextSubmenuGroupInput[];
-  isActive: boolean;
-  isDanger: boolean;
-  itemId: string;
-  label: string;
-  onCloseSubmenu: () => void;
-  onOpenSubmenu: (input: ShowContextSubmenuInput) => void;
-  onPick: (action: ClipboardAction) => void;
-}
-
-/**
- * Renders a root menu item and asks Rust to show the submenu window when needed.
- */
-const ContextMenuItem: FC<ContextMenuItemProps> = (props) => {
-  const {
-    accelerator,
-    action,
-    groups,
-    isActive,
-    isDanger,
-    itemId,
-    label,
-    onCloseSubmenu,
-    onOpenSubmenu,
-    onPick,
-  } = props;
-  const hasGroups = groups.length > 0;
-
-  const handleClick = () => {
-    if (hasGroups) return;
-
-    onPick(action);
-  };
-
-  const handlePointerEnter = (event: PointerEvent<HTMLButtonElement>) => {
-    if (!hasGroups) {
-      onCloseSubmenu();
-
-      return;
-    }
-
-    const rect = event.currentTarget.getBoundingClientRect();
-    onOpenSubmenu({
-      action,
-      anchor: {
-        height: rect.height,
-        left: rect.left,
-        top: rect.top,
-        width: rect.width,
-      },
-      groups,
-      itemId,
-    });
-  };
-
-  return (
-    <button
-      className={cn(
-        "flex h-8 w-full cursor-pointer items-center justify-between rounded-1.5 border-0 bg-transparent px-3 text-sm transition-colors",
-        {
-          "bg-ant-text-hover": isActive && !isDanger,
-          "hover:(text-ant-light-solid bg-ant-error) text-ant-error": isDanger,
-          "hover:bg-ant-text-hover": !isDanger,
-        },
-      )}
-      onClick={handleClick}
-      onPointerEnter={handlePointerEnter}
-      type="button"
-    >
-      <span className="truncate">{label}</span>
-      {hasGroups ? (
-        <span className="i-lucide:chevron-right ml-3 size-4 text-ant-description" />
-      ) : (
-        accelerator && (
-          <span className="ml-3 whitespace-nowrap text-ant-description text-xs">
-            {formatShortcutDisplay(accelerator)}
-          </span>
-        )
-      )}
-    </button>
-  );
-};
-
-/**
- * Renders the secondary Windows custom context menu window.
- */
-export const ContextSubmenu: FC = () => {
-  const [payload, setPayload] = useState<ShowContextSubmenuInput | null>(null);
-
-  useTauriListen<ShowContextSubmenuInput>(
-    TAURI_EVENT.CONTEXT_SUBMENU_SHOW,
-    (event) => {
-      setPayload(event.payload);
-    },
-  );
-
-  const handleBeforeDestroy = (event: { payload: BeforeDestroyPayload }) => {
-    if (event.payload.label !== WINDOW_LABEL.CONTEXT_SUBMENU) return;
-
-    setPayload(null);
-  };
-
-  useTauriListen<BeforeDestroyPayload>(
-    TAURI_EVENT.WINDOW_BEFORE_DESTROY,
-    handleBeforeDestroy,
-  );
-
-  useMount(async () => {
-    const latestPayload = await getContextSubmenuPayload();
-    if (!latestPayload) return;
-
-    setPayload(latestPayload);
-  });
-
-  useEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
-
-    void hideContextMenus();
-  });
-
-  const handleGroupClick = async (event: MouseEvent<HTMLButtonElement>) => {
-    if (!payload) return;
-
-    const groupId = event.currentTarget.dataset.groupId;
-    if (!groupId) return;
-
-    await emitTo(WINDOW_LABEL.CLIPBOARD, TAURI_EVENT.CLIPBOARD_MENU_ACTION, {
-      action: payload.action,
-      groupId,
-      itemId: payload.itemId,
-    });
-
-    await hideContextMenus();
-  };
-
-  if (!payload) return null;
-
-  return (
-    <MenuSurface>
-      {payload.groups.map((group) => {
-        return (
-          <button
-            className="flex h-8 w-full cursor-pointer items-center gap-2 rounded-1.5 border-0 bg-transparent px-3 text-left text-sm transition-colors hover:bg-ant-text-hover"
-            data-group-id={group.id}
-            key={group.id}
-            onClick={handleGroupClick}
-            type="button"
-          >
-            <span
-              className={cn("size-4 text-ant-primary", {
-                "i-lucide:check": group.checked,
-              })}
-            />
-            <span className="truncate">{group.label}</span>
-          </button>
-        );
-      })}
-    </MenuSurface>
-  );
-};
-
-export default ContextMenu;
+export default ClipboardContextMenu;

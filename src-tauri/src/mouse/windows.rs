@@ -77,19 +77,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
     let cursor = data.pt;
 
     if let Some(app) = APP_HANDLE.get() {
-        // 右键菜单优先：菜单可见时，光标在菜单矩形外 → 关菜单（剪贴板窗口不连带关，
-        // 避免「打开菜单后误点窗内空白处」直接收掉整个面板）。
-        let menu_handled = if crate::menu::context_window::is_visible(app) {
-            if cursor_outside_context_menu(app, cursor) {
-                schedule_hide_context_menu(app);
-            }
-            true
-        } else {
-            false
-        };
-
-        if !menu_handled
-            && window::should_auto_hide_clipboard_window()
+        if window::should_auto_hide_clipboard_window()
             && cursor_outside_clipboard_window(app, cursor)
         {
             schedule_hide(app);
@@ -121,12 +109,6 @@ fn cursor_outside_clipboard_window(app: &AppHandle, cursor: POINT) -> bool {
         || cursor.y >= position.y + size.height as i32
 }
 
-/// 钩子收到的 `cursor` 是 physical 坐标，菜单矩形也用 physical 比对，
-/// 不走 logical 换算（避免边缘 1px 舍入误判）。
-fn cursor_outside_context_menu(app: &AppHandle, cursor: POINT) -> bool {
-    !crate::menu::context_window::contains_physical_point(app, cursor.x, cursor.y)
-}
-
 fn schedule_hide(app: &AppHandle) {
     let handle = app.clone();
     if let Err(err) = app.run_on_main_thread(move || {
@@ -135,14 +117,5 @@ fn schedule_hide(app: &AppHandle) {
         }
     }) {
         log::warn!("schedule auto-hide failed: {err}");
-    }
-}
-
-fn schedule_hide_context_menu(app: &AppHandle) {
-    let handle = app.clone();
-    if let Err(err) = app.run_on_main_thread(move || {
-        crate::menu::context_window::hide(&handle);
-    }) {
-        log::warn!("schedule auto-hide context menu failed: {err}");
     }
 }

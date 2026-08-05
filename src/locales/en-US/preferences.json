@@ -374,8 +374,6 @@
           "title": "Window Lifecycle",
           "windows": {
             "clipboard": "Clipboard Window",
-            "contextMenu": "Context Menu Window",
-            "contextSubmenu": "Context Submenu Window",
             "onboarding": "Onboarding Window",
             "preference": "Preferences Window",
             "preview": "Clipboard Preview Window",
@@ -583,11 +581,11 @@
       },
       "window": {
         "idleDestroySeconds": {
-          "description": "Release secondary WebViews such as preferences, preview, and context menus after they have been hidden for this long; they rebuild automatically next time.",
-          "title": "Secondary Window Idle Release"
+          "description": "Release WebViews for lightweight windows such as the clipboard, preferences, and preview after they have been hidden for this long; they rebuild automatically next time.",
+          "title": "Window Idle Release"
         },
         "lightweightMode": {
-          "description": "Pause unnecessary refresh work after the clipboard window hides, and release secondary rendering resources after they become idle.",
+          "description": "Pause unnecessary refresh work after windows hide, then release their WebViews when idle; they rebuild automatically when reopened.",
           "title": "Lightweight Mode"
         },
         "position": {

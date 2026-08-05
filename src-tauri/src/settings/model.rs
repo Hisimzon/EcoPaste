@@ -570,9 +570,9 @@ pub struct Window {
     pub select_category_on_open: WindowOpenCategorySelection,
     /// 打开剪贴板窗口时切换到指定自定义分组；可为 preserve / all / group:<id>。
     pub select_group_on_open: String,
-    /// 隐藏窗口轻量化：剪贴板窗口隐藏后进入 dormant，非剪贴板窗口空闲后释放 WebView。
+    /// 隐藏窗口轻量化：窗口隐藏后进入 dormant，空闲后释放 WebView，下次打开时重建。
     pub lightweight_mode: bool,
-    /// 非剪贴板窗口隐藏后释放 WebView 的空闲秒数。
+    /// 窗口隐藏后释放 WebView 的空闲秒数。
     pub idle_destroy_seconds: u32,
 }
 

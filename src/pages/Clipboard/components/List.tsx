@@ -102,6 +102,8 @@ const List: FC = () => {
     useState<ClipboardContextMenuState | null>(null);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const isAtTopRef = useRef(true);
+  const isListScrollingRef = useRef(false);
+  const pendingFirstVisibleIndexRef = useRef(0);
   const itemElementMapRef = useRef(new Map<string, HTMLDivElement>());
   const closePreviewRef = useRef<(reason: string) => void>(() => {});
   const displaySettingsMountedRef = useRef(false);
@@ -775,9 +777,19 @@ const List: FC = () => {
     startIndex: number;
     endIndex: number;
   }) => {
-    setFirstVisibleIndex(startIndex);
+    pendingFirstVisibleIndexRef.current = startIndex;
+    if (!isListScrollingRef.current) setFirstVisibleIndex(startIndex);
 
     loadRange(startIndex, endIndex);
+  };
+
+  const handleScrollingChange = (scrolling: boolean) => {
+    isListScrollingRef.current = scrolling;
+    handleListScrollingChange(scrolling);
+
+    if (scrolling) return;
+
+    setFirstVisibleIndex(pendingFirstVisibleIndexRef.current);
   };
 
   const handleAtTopStateChange = (atTop: boolean) => {
@@ -870,7 +882,7 @@ const List: FC = () => {
         atTopStateChange={handleAtTopStateChange}
         components={{ TopItemList }}
         computeItemKey={computeItemKey}
-        isScrolling={handleListScrollingChange}
+        isScrolling={handleScrollingChange}
         itemContent={renderItemContent}
         rangeChanged={handleRangeChanged}
         ref={virtuosoRef}

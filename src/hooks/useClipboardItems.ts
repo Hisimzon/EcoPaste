@@ -42,7 +42,6 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadedInitial, setLoadedInitial] = useState(false);
-  const [loadingRangeCount, setLoadingRangeCount] = useState(0);
 
   const commitItems = useCallback((nextItems: Map<number, ClipboardItem>) => {
     itemsRef.current = nextItems;
@@ -61,19 +60,16 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
 
   const resetLoadingRanges = useCallback(() => {
     loadingRangesRef.current = [];
-    setLoadingRangeCount(0);
   }, []);
 
   const addLoadingRange = useCallback((range: ClipboardItemsRange) => {
     loadingRangesRef.current = [...loadingRangesRef.current, range];
-    setLoadingRangeCount(loadingRangesRef.current.length);
   }, []);
 
   const removeLoadingRange = useCallback((range: ClipboardItemsRange) => {
     loadingRangesRef.current = loadingRangesRef.current.filter((current) => {
       return current.start !== range.start || current.end !== range.end;
     });
-    setLoadingRangeCount(loadingRangesRef.current.length);
   }, []);
 
   const fetchRange = useCallback(
@@ -221,9 +217,26 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
         start: Math.max(0, Math.min(startIndex, endIndex)),
       };
 
-      void fetchRange(startIndex - PRELOAD_ROWS, endIndex + PRELOAD_ROWS, {
-        token: requestTokenRef.current,
-      });
+      if (!loadedInitialRef.current) return;
+
+      const range = normalizeFetchRange(
+        startIndex - PRELOAD_ROWS,
+        endIndex + PRELOAD_ROWS,
+        totalRef.current,
+      );
+      if (range === null) return;
+
+      for (
+        let pageStart = range.start;
+        pageStart <= range.end;
+        pageStart += PAGE_SIZE
+      ) {
+        void fetchRange(
+          pageStart,
+          Math.min(pageStart + PAGE_SIZE - 1, range.end),
+          { token: requestTokenRef.current },
+        );
+      }
     },
     [fetchRange],
   );
@@ -328,7 +341,6 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
     getItemIndexById,
     loadedInitial,
     loading,
-    loadingMore: loadingRangeCount > 0 && loadedInitial,
     loadRange,
     patchItemById,
     reload,

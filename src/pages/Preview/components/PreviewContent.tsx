@@ -13,10 +13,10 @@ import VirtuosoScroller, {
   type VirtuosoScrollerChildrenProps,
 } from "@/components/VirtuosoScroller";
 import { cn } from "@/utils/cn";
+import { PREVIEW_TEXT_CHUNK_CHARS } from "../constants";
 
 export interface PreviewContentProps {
   payload: ClipboardPreviewPayload | null;
-  textWrapChars: number;
 }
 
 export interface PreviewHeaderProps {
@@ -25,10 +25,6 @@ export interface PreviewHeaderProps {
 
 interface PayloadViewerProps {
   payload: ClipboardPreviewPayload;
-}
-
-interface TextViewerProps extends PayloadViewerProps {
-  textWrapChars: number;
 }
 
 interface FilePreviewRowProps {
@@ -76,7 +72,7 @@ export const PreviewHeader: FC<PreviewHeaderProps> = (props) => {
  * 按 payload kind 分发到基础 viewer。
  */
 export const PreviewContent: FC<PreviewContentProps> = (props) => {
-  const { payload, textWrapChars } = props;
+  const { payload } = props;
   const { t } = useTranslation("preview");
 
   if (!payload) {
@@ -94,19 +90,19 @@ export const PreviewContent: FC<PreviewContentProps> = (props) => {
 
   if (payload.kind === "files") return <FilesViewer payload={payload} />;
 
-  return <TextViewer payload={payload} textWrapChars={textWrapChars} />;
+  return <TextViewer payload={payload} />;
 };
 
 /**
  * 文本预览：所有文本族内容都按纯文本虚拟行展示，避免长 HTML / RTF 构造大 DOM。
  */
-const TextViewer: FC<TextViewerProps> = (props) => {
-  const { payload, textWrapChars } = props;
+const TextViewer: FC<PayloadViewerProps> = (props) => {
+  const { payload } = props;
   const { t } = useTranslation("preview");
   const text = payload.text ?? "";
   const rows = useMemo(() => {
-    return buildTextPreviewRows(text, textWrapChars);
-  }, [text, textWrapChars]);
+    return buildTextPreviewRows(text);
+  }, [text]);
 
   if (text.length === 0) {
     return (
@@ -143,7 +139,7 @@ const TextViewer: FC<TextViewerProps> = (props) => {
     const row = rows[index] ?? "";
 
     return (
-      <div className="min-h-5.5 whitespace-pre px-4 font-mono text-xs leading-5.5">
+      <div className="min-h-5.5 whitespace-pre-wrap break-words px-4 font-mono text-xs leading-5.5">
         {row.length === 0 ? " " : row}
       </div>
     );
@@ -311,9 +307,9 @@ const FilePreviewRow: FC<FilePreviewRowProps> = (props) => {
 };
 
 /**
- * 将长文本拆成虚拟行，超长单行按固定字符数软切块。
+ * 将文本按原始换行拆分；超长单行按 Unicode code point 分块，具体换行交给浏览器按真实宽度处理。
  */
-function buildTextPreviewRows(text: string, wrapChars: number) {
+function buildTextPreviewRows(text: string) {
   const rows: string[] = [];
 
   for (const line of text.split("\n")) {
@@ -322,12 +318,34 @@ function buildTextPreviewRows(text: string, wrapChars: number) {
       continue;
     }
 
-    for (let start = 0; start < line.length; start += wrapChars) {
-      rows.push(line.slice(start, start + wrapChars));
-    }
+    appendTextPreviewChunks(rows, line);
   }
 
   return rows;
+}
+
+/**
+ * 按 code point 边界切分超长单行，避免切断 emoji 等 UTF-16 代理对。
+ */
+function appendTextPreviewChunks(rows: string[], line: string) {
+  let chunkStart = 0;
+  let chunkChars = 0;
+
+  for (let index = 0; index < line.length; ) {
+    const codePoint = line.codePointAt(index) ?? 0;
+    index += codePoint > 0xffff ? 2 : 1;
+    chunkChars += 1;
+
+    if (chunkChars < PREVIEW_TEXT_CHUNK_CHARS) continue;
+
+    rows.push(line.slice(chunkStart, index));
+    chunkStart = index;
+    chunkChars = 0;
+  }
+
+  if (chunkStart < line.length) {
+    rows.push(line.slice(chunkStart));
+  }
 }
 
 /**

@@ -393,8 +393,8 @@ pub async fn write_to_clipboard(
 
 /// 「点击列表项 → 自动粘贴」的组合命令：写回剪贴板 + 隐藏剪贴板窗口 + 触发系统级粘贴。
 ///
-/// 窗口已是非激活面板（macOS NSPanel `nonactivating_panel` / Windows `focusable=false`），
-/// show 时不会把前台 App 推走，前台焦点始终在用户原窗口。
+/// 窗口通常以非激活面板显示；Windows 手动编辑输入框时可能临时激活主窗口，
+/// 此时粘贴前会显式恢复进入编辑前记录的外部目标窗口。
 /// macOS 上 panel 会成为 key window，CGEvent ⌘V 若不先 hide 会被 panel 自己吞掉，
 /// hide 后插入 50ms 让 panel 真正 order_out（hide_window 是 run_on_main_thread 异步派发，
 /// 右键菜单触发时主线程仍在处理菜单关闭，不等会出现 ⌘V 早于 hide 完成的竞态）。
@@ -423,9 +423,14 @@ pub async fn paste_clipboard_item(
     crate::clipboard::write_to_clipboard(&store, guard.inner().as_ref(), &item, write_plain)?;
     mark_item_reused_if_enabled(&app, &pool, &id, item.kind).await?;
 
+    #[cfg(target_os = "windows")]
+    if let Err(err) = window::windows::restore_clipboard_paste_target(&app) {
+        log::warn!("restore clipboard paste target failed: {err:?}");
+    }
+
     if window::is_clipboard_window_pinned() {
         // 固定时窗口保持可见：macOS 上 panel 仍是 key window 会吞掉 ⌘V，需先 resign key
-        // 让键焦点回到前台 App 的窗口；Windows 剪贴板窗口 focusable=false，无需处理。
+        // 让键焦点回到前台 App 的窗口；Windows 已在上方恢复粘贴目标。
         #[cfg(target_os = "macos")]
         if let Err(err) = window::macos::resign_clipboard_panel_key(&app) {
             log::warn!("resign clipboard panel key before paste failed: {err:?}");
@@ -436,7 +441,8 @@ pub async fn paste_clipboard_item(
 
     // hide / resign 都是 run_on_main_thread 异步派发；不等一拍，simulate_paste 的 ⌘V
     // 会赶在 panel 真正 order_out / 让出 key 前命中 panel 自己（webview 吞掉）。
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    let settle_delay_ms = if cfg!(target_os = "windows") { 120 } else { 50 };
+    tokio::time::sleep(std::time::Duration::from_millis(settle_delay_ms)).await;
 
     crate::keystroke::simulate_paste()?;
 

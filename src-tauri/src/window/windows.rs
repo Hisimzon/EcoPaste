@@ -1,32 +1,35 @@
 //! Windows 窗口管理：剪贴板窗口始终不可聚焦，避免破坏外部粘贴目标。
+use std::sync::atomic::{AtomicIsize, Ordering};
+
 use tauri::AppHandle;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST,
-    SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, WS_EX_NOACTIVATE,
+    GetForegroundWindow, GetWindowLongPtrW, IsWindow, SetForegroundWindow, SetWindowLongPtrW,
+    SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
+    SWP_NOSIZE, SWP_SHOWWINDOW, WS_EX_NOACTIVATE,
 };
 
 use super::{get_window, CLIPBOARD_WINDOW_LABEL};
 use crate::core::Result;
 use crate::{keyboard, mouse};
 
+static CLIPBOARD_PASTE_TARGET: AtomicIsize = AtomicIsize::new(0);
+
 pub fn show_window(app_handle: &AppHandle, label: &str) -> Result<()> {
     let window = get_window(app_handle, label)?;
     if label == CLIPBOARD_WINDOW_LABEL {
+        remember_clipboard_paste_target(&window)?;
         window
             .set_focusable(false)
             .map_err(|e| anyhow::anyhow!(e))?;
         apply_no_activate(&window, true)?;
-    }
-
-    window.show().map_err(|e| anyhow::anyhow!(e))?;
-    window.unminimize().map_err(|e| anyhow::anyhow!(e))?;
-
-    if label == CLIPBOARD_WINDOW_LABEL {
+        window.show().map_err(|e| anyhow::anyhow!(e))?;
         show_without_activation(&window)?;
         keyboard::enable_navigation_keys(app_handle);
         mouse::enable_outside_click_hide(app_handle);
     } else {
+        window.show().map_err(|e| anyhow::anyhow!(e))?;
+        window.unminimize().map_err(|e| anyhow::anyhow!(e))?;
         window.set_focus().map_err(|e| anyhow::anyhow!(e))?;
     }
 
@@ -35,6 +38,10 @@ pub fn show_window(app_handle: &AppHandle, label: &str) -> Result<()> {
 
 pub fn set_clipboard_window_editing(app_handle: &AppHandle, editing: bool) -> Result<()> {
     let window = get_window(app_handle, CLIPBOARD_WINDOW_LABEL)?;
+
+    if editing {
+        remember_clipboard_paste_target(&window)?;
+    }
 
     window
         .set_focusable(editing)
@@ -73,9 +80,50 @@ pub fn hide_window(app_handle: &AppHandle, label: &str) -> Result<()> {
     Ok(())
 }
 
-fn apply_no_activate(window: &tauri::WebviewWindow, no_activate: bool) -> Result<()> {
+/// EcoPaste 曾因手动编辑进入前台时，粘贴前恢复原外部目标窗口。
+pub fn restore_clipboard_paste_target(app_handle: &AppHandle) -> Result<()> {
+    let window = get_window(app_handle, CLIPBOARD_WINDOW_LABEL)?;
+    let clipboard_hwnd = window_hwnd(&window)?;
+    let foreground_hwnd = unsafe { GetForegroundWindow() };
+
+    if foreground_hwnd.0 != 0 && foreground_hwnd != clipboard_hwnd {
+        CLIPBOARD_PASTE_TARGET.store(foreground_hwnd.0, Ordering::Relaxed);
+        return Ok(());
+    }
+
+    let target_hwnd = HWND(CLIPBOARD_PASTE_TARGET.load(Ordering::Relaxed));
+    if target_hwnd.0 == 0
+        || target_hwnd == clipboard_hwnd
+        || !unsafe { IsWindow(target_hwnd) }.as_bool()
+    {
+        return Ok(());
+    }
+
+    if !unsafe { SetForegroundWindow(target_hwnd) }.as_bool() {
+        return Err(anyhow::anyhow!("restore clipboard paste target window").into());
+    }
+
+    Ok(())
+}
+
+fn remember_clipboard_paste_target(window: &tauri::WebviewWindow) -> Result<()> {
+    let clipboard_hwnd = window_hwnd(window)?;
+    let foreground_hwnd = unsafe { GetForegroundWindow() };
+
+    if foreground_hwnd.0 != 0 && foreground_hwnd != clipboard_hwnd {
+        CLIPBOARD_PASTE_TARGET.store(foreground_hwnd.0, Ordering::Relaxed);
+    }
+
+    Ok(())
+}
+
+fn window_hwnd(window: &tauri::WebviewWindow) -> Result<HWND> {
     let raw_hwnd = window.hwnd().map_err(|e| anyhow::anyhow!(e))?;
-    let hwnd = HWND(raw_hwnd.0 as isize);
+    Ok(HWND(raw_hwnd.0 as isize))
+}
+
+fn apply_no_activate(window: &tauri::WebviewWindow, no_activate: bool) -> Result<()> {
+    let hwnd = window_hwnd(window)?;
 
     unsafe {
         let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
@@ -106,8 +154,7 @@ fn apply_no_activate(window: &tauri::WebviewWindow, no_activate: bool) -> Result
 
 /// 在无激活样式已经生效后显示主窗口，避免快捷键呼出期间抢占前台窗口。
 fn show_without_activation(window: &tauri::WebviewWindow) -> Result<()> {
-    let raw_hwnd = window.hwnd().map_err(|e| anyhow::anyhow!(e))?;
-    let hwnd = HWND(raw_hwnd.0 as isize);
+    let hwnd = window_hwnd(window)?;
 
     unsafe {
         SetWindowPos(

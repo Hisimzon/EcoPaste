@@ -167,6 +167,7 @@ pub fn run() {
             commands::change_storage_location,
             commands::reset_storage_location,
             commands::clean_resource_cache,
+            commands::compact_noted_item_pinyin_indexes,
             commands::open_preference_directory,
             commands::get_autostart,
             commands::set_autostart,

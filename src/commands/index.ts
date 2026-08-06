@@ -138,6 +138,11 @@ export interface CleanCacheResult {
   storageUsage: StorageUsage;
 }
 
+export interface CompactPinyinIndexesResult {
+  optimizedItems: number;
+  removedBytes: number;
+}
+
 export interface StorageLocation {
   currentPath: string;
   defaultPath: string;
@@ -591,6 +596,29 @@ export const cleanResourceCache = async () => {
   getMessageApi().success(
     i18n.t(messageKey, {
       count: result.removedFiles,
+      size: formatCommandBytes(result.removedBytes),
+    }),
+  );
+
+  return result;
+};
+
+/**
+ * 将有备注记录的拼音索引压缩为仅包含备注。
+ */
+export const compactNotedItemPinyinIndexes = async () => {
+  const result = await call<CompactPinyinIndexesResult>(
+    TAURI_COMMAND.COMPACT_NOTED_ITEM_PINYIN_INDEXES,
+    "commands:labels.compactPinyinIndexes",
+  );
+  const messageKey =
+    result.optimizedItems === 0
+      ? "commands:messages.pinyinIndexesAlreadyCompact"
+      : "commands:messages.pinyinIndexesCompacted";
+
+  getMessageApi().success(
+    i18n.t(messageKey, {
+      count: result.optimizedItems,
       size: formatCommandBytes(result.removedBytes),
     }),
   );

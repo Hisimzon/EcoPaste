@@ -12,6 +12,7 @@ import {
   type CleanCacheResult,
   changeStorageLocation,
   cleanResourceCache,
+  compactNotedItemPinyinIndexes,
   type ExportHistoryBackupResult,
   getWindowLifecycleSnapshot,
   inspectHistoryBackup,
@@ -43,6 +44,7 @@ const BACKUP_EXTENSION = "ecopastebak";
 const ABOUT_CHECK_UPDATES_SETTING_ID = "about.checkUpdates";
 const ABOUT_GITHUB_SETTING_ID = "about.github";
 const CLEAN_CACHE_SETTING_ID = "localData.cleanCache";
+const COMPACT_PINYIN_INDEXES_SETTING_ID = "history.compactPinyinIndexes";
 const CUSTOM_GROUPS_SETTING_ID = "organizing.customGroups";
 const DATA_DIRECTORY_SETTING_ID = "localData.dataDirectory";
 const EXPORT_BACKUP_SETTING_ID = "backup.exportHistory";
@@ -145,6 +147,19 @@ const ActionControl: FC<ActionControlProps> = (props) => {
     }
   };
 
+  const compactPinyinIndexes = async () => {
+    setLoading(true);
+    try {
+      await runWithKeepalive(
+        "compact-pinyin-indexes",
+        compactNotedItemPinyinIndexes,
+      );
+      markActionComplete();
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const resetPreferenceSettings = async () => {
     setLoading(true);
     try {
@@ -201,6 +216,24 @@ const ActionControl: FC<ActionControlProps> = (props) => {
       ),
       onOk: cleanCache,
       title: t("preferences:schema.settings.localData.cleanCache.confirmTitle"),
+    });
+  };
+
+  const confirmCompactPinyinIndexes = () => {
+    getModalApi().confirm({
+      cancelText: t("common:actions.cancel"),
+      centered: true,
+      content: t(
+        "preferences:schema.settings.history.compactPinyinIndexes.confirmContent",
+      ),
+      okButtonProps: { danger: true },
+      okText: t(
+        "preferences:schema.settings.history.compactPinyinIndexes.controlLabel",
+      ),
+      onOk: compactPinyinIndexes,
+      title: t(
+        "preferences:schema.settings.history.compactPinyinIndexes.confirmTitle",
+      ),
     });
   };
 
@@ -370,6 +403,11 @@ const ActionControl: FC<ActionControlProps> = (props) => {
 
     if (setting.id === CLEAN_CACHE_SETTING_ID) {
       confirmCleanCache();
+      return;
+    }
+
+    if (setting.id === COMPACT_PINYIN_INDEXES_SETTING_ID) {
+      confirmCompactPinyinIndexes();
       return;
     }
 

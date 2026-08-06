@@ -386,6 +386,13 @@
           "description": "Check and clean history every specified number of hours. 0 disables periodic cleanup; startup cleanup still runs once.",
           "title": "Auto Cleanup Interval"
         },
+        "compactPinyinIndexes": {
+          "confirmContent": "This removes full-body pinyin and initial indexes from items that already have notes, keeping only note pinyin. Body content, notes, and direct Chinese search remain available, but those items can no longer match body pinyin. The SQLite file may not shrink immediately; released pages remain reusable.",
+          "confirmTitle": "Clean body pinyin indexes?",
+          "controlLabel": "Clean Indexes",
+          "description": "Keep only note pinyin for items with notes to reduce pinyin index data in the database.",
+          "title": "Clean Body Pinyin"
+        },
         "maxCount": {
           "description": "When the limit is exceeded, older regular records are cleaned automatically; favorites and pinned items are always kept. 0 means unlimited items.",
           "title": "Maximum Items"

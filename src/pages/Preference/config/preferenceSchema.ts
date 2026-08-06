@@ -186,6 +186,11 @@ export const preferenceTabs: PreferenceTab[] = [
               return settings.clipboard.history.cleanupIntervalHours;
             },
           },
+          {
+            control: { danger: true, type: "action" },
+            id: "history.compactPinyinIndexes",
+            keywords: ["pinyin", "search", "note", "cleanup", "storage"],
+          },
         ],
       },
       {

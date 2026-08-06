@@ -1404,6 +1404,28 @@ pub struct UpdateNoteResult {
     pub auto_favorited: bool,
 }
 
+/// 清理有备注记录的正文拼音索引后的统计结果。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompactPinyinIndexesResult {
+    pub optimized_items: u64,
+    pub removed_bytes: u64,
+}
+
+/// 将有备注记录的拼音索引压缩为仅包含备注。
+#[tauri::command]
+pub async fn compact_noted_item_pinyin_indexes(
+    db: State<'_, DatabaseState>,
+) -> Result<CompactPinyinIndexesResult> {
+    let pool = db.pool().await;
+    let outcome = crate::db::pinyin::compact_noted_item_indexes(&pool).await?;
+
+    Ok(CompactPinyinIndexesResult {
+        optimized_items: outcome.optimized_items,
+        removed_bytes: outcome.removed_bytes,
+    })
+}
+
 /// 写入备注；`note` 由 Rust 统一 trim + 空串归一化为 NULL。
 /// auto-favorite：写入非空备注时，若 `settings.clipboard.content.autoFavorite` 开启，
 /// 顺带把 `is_favorite` 置为 true（已收藏的无变化；清空备注不触发）。

@@ -10,6 +10,7 @@ export const TAURI_COMMAND = {
   CHECK_FOR_UPDATES: "check_for_updates",
   CLEAN_RESOURCE_CACHE: "clean_resource_cache",
   CLEAR_CLIPBOARD_ITEMS: "clear_clipboard_items",
+  COMPACT_NOTED_ITEM_PINYIN_INDEXES: "compact_noted_item_pinyin_indexes",
   CLOSE_CLIPBOARD_PREVIEW: "close_clipboard_preview",
   CREATE_CLIPBOARD_GROUP: "create_clipboard_group",
   DELETE_CLIPBOARD_GROUP: "delete_clipboard_group",

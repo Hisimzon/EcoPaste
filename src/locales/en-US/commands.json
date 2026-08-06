@@ -16,6 +16,7 @@
     "changeStorageLocation": "Change data directory",
     "checkForUpdates": "Check for updates",
     "cleanCache": "Clean cache",
+    "compactPinyinIndexes": "Clean pinyin indexes",
     "clearClipboardItems": "Clear records",
     "closePreview": "Close preview",
     "closeWindow": "Close window",
@@ -97,6 +98,8 @@
     "legacyDataImported": "Imported {{imported}} legacy items and skipped {{skipped}}",
     "noteSaved": "Saved",
     "noteSavedAndFavorited": "Saved and favorited",
+    "pinyinIndexesAlreadyCompact": "No body pinyin indexes need cleaning",
+    "pinyinIndexesCompacted": "Optimized {{count}} items and reduced pinyin index data by about {{size}}",
     "settingsReset": "Preferences reset",
     "storageLocationChanged": "Data directory changed",
     "storageLocationReset": "Data directory reset"

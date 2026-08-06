@@ -16,6 +16,7 @@
     "changeStorageLocation": "更改数据目录",
     "checkForUpdates": "检查更新",
     "cleanCache": "清理缓存",
+    "compactPinyinIndexes": "清理拼音索引",
     "clearClipboardItems": "清空记录",
     "closePreview": "关闭预览",
     "closeWindow": "关闭窗口",
@@ -97,6 +98,8 @@
     "legacyDataImported": "已导入 {{imported}} 条旧版记录，跳过 {{skipped}} 条",
     "noteSaved": "已保存",
     "noteSavedAndFavorited": "已保存并收藏",
+    "pinyinIndexesAlreadyCompact": "没有需要清理的正文拼音索引",
+    "pinyinIndexesCompacted": "已优化 {{count}} 条记录，减少约 {{size}} 的拼音索引数据",
     "settingsReset": "偏好已重置",
     "storageLocationChanged": "数据目录已更改",
     "storageLocationReset": "数据目录已还原"

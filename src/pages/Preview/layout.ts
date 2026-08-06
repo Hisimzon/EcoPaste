@@ -20,10 +20,16 @@ import {
   PREVIEW_PANEL_MIN_WIDTH,
   PREVIEW_TEXT_HORIZONTAL_PADDING,
   PREVIEW_TEXT_ROW_HEIGHT,
-  PREVIEW_TEXT_SOFT_WRAP_CHARS,
   PREVIEW_TEXT_VERTICAL_PADDING,
 } from "./constants";
 import type { PreviewMeasuredSize } from "./measurement";
+
+const PREVIEW_TEXT_CANVAS_FONT =
+  '12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+const PREVIEW_TEXT_FALLBACK_CHARACTER_WIDTH = 7.2;
+const PREVIEW_TEXT_WIDTH_SAMPLE_CHARS = 256;
+const PREVIEW_TEXT_HEIGHT_SAMPLE_CHARS = 2048;
+let textMeasureContext: CanvasRenderingContext2D | null | undefined;
 
 /**
  * 图片 payload 已有 DB 尺寸时，直接按比例估算面板尺寸，避免等图片加载后才撑开。
@@ -205,7 +211,7 @@ function resolveImagePanelSize(
 }
 
 /**
- * 文本 viewer 使用虚拟行渲染，测量层不再渲染整段内容；这里按同款软切行估算面板尺寸。
+ * 文本 viewer 使用虚拟分块渲染，面板宽度按字体实际测量，行高按最终内容宽度估算。
  */
 function resolveTextPanelSize(
   layout: ClipboardPreviewState["layout"],
@@ -219,8 +225,34 @@ function resolveTextPanelSize(
     PREVIEW_PANEL_MAX_HEIGHT,
     layout.panelRect.height,
   );
-  const wrapChars = resolveTextWrapChars(maxPanelWidth);
-  const rowCount = countTextPreviewRows(text, wrapChars);
+  const maxContentWidth = Math.max(
+    1,
+    maxPanelWidth - PREVIEW_TEXT_HORIZONTAL_PADDING,
+  );
+  const measuredContentWidth = measureTextContentWidth(text, maxContentWidth);
+  const width = clamp(
+    Math.ceil(measuredContentWidth + PREVIEW_TEXT_HORIZONTAL_PADDING),
+    PREVIEW_PANEL_MIN_WIDTH,
+    maxPanelWidth,
+  );
+  const contentWidth = Math.max(
+    1,
+    width - PREVIEW_TEXT_HORIZONTAL_PADDING,
+  );
+  const maxVisibleRows = Math.max(
+    1,
+    Math.ceil(
+      (maxPanelHeight -
+        PREVIEW_PANEL_HEADER_HEIGHT -
+        PREVIEW_TEXT_VERTICAL_PADDING) /
+        PREVIEW_TEXT_ROW_HEIGHT,
+    ),
+  );
+  const rowCount = countTextPreviewRows(
+    text,
+    contentWidth,
+    maxVisibleRows,
+  );
   const contentHeight =
     rowCount === 0
       ? PREVIEW_EMPTY_CONTENT_HEIGHT
@@ -232,27 +264,26 @@ function resolveTextPanelSize(
       PREVIEW_PANEL_MIN_HEIGHT,
       maxPanelHeight,
     ),
-    width: clamp(maxPanelWidth, PREVIEW_PANEL_MIN_WIDTH, maxPanelWidth),
+    width,
   };
 }
 
 /**
- * 根据实际面板宽度扩展文本软切行长度，避免宽面板仍按最小宽度切行造成右侧大片空白。
+ * 测量最长逻辑行的真实字体宽度；超过面板上限后立即封顶。
  */
-export function resolveTextWrapChars(panelWidth: number) {
-  const contentWidth = Math.max(
-    1,
-    panelWidth - PREVIEW_TEXT_HORIZONTAL_PADDING,
-  );
-  const minimumContentWidth =
-    PREVIEW_PANEL_MIN_WIDTH - PREVIEW_TEXT_HORIZONTAL_PADDING;
+function measureTextContentWidth(text: string, maxContentWidth: number) {
+  let measuredWidth = 0;
 
-  return Math.max(
-    1,
-    Math.floor(
-      (contentWidth / minimumContentWidth) * PREVIEW_TEXT_SOFT_WRAP_CHARS,
-    ),
-  );
+  for (const line of text.split("\n")) {
+    if (line.length > PREVIEW_TEXT_WIDTH_SAMPLE_CHARS) {
+      return maxContentWidth;
+    }
+
+    measuredWidth = Math.max(measuredWidth, measureTextWidth(line));
+    if (measuredWidth >= maxContentWidth) return maxContentWidth;
+  }
+
+  return Math.min(measuredWidth, maxContentWidth);
 }
 
 /**
@@ -289,17 +320,55 @@ function resolveFilesPanelSize(
 }
 
 /**
- * 统计虚拟文本行数，和 `TextViewer` 的软切块规则保持一致。
+ * 按字体测量宽度估算浏览器换行后的视觉行数，用于限制面板高度。
  */
-function countTextPreviewRows(text: string, wrapChars: number) {
+function countTextPreviewRows(
+  text: string,
+  contentWidth: number,
+  maxVisibleRows: number,
+) {
   if (text.length === 0) return 0;
 
   let rowCount = 0;
   for (const line of text.split("\n")) {
-    rowCount += Math.max(1, Math.ceil(line.length / wrapChars));
+    if (line.length > PREVIEW_TEXT_HEIGHT_SAMPLE_CHARS) {
+      return maxVisibleRows;
+    }
+
+    rowCount += Math.max(1, Math.ceil(measureTextWidth(line) / contentWidth));
+    if (rowCount >= maxVisibleRows) return maxVisibleRows;
   }
 
   return rowCount;
+}
+
+/**
+ * 使用和文本 viewer 一致的 monospace 字体测量字符串；canvas 不可用时回退到平均字符宽度。
+ */
+function measureTextWidth(text: string) {
+  const context = getTextMeasureContext();
+  if (context) return context.measureText(text).width;
+
+  let characterCount = 0;
+  for (const _character of text) {
+    characterCount += 1;
+  }
+
+  return characterCount * PREVIEW_TEXT_FALLBACK_CHARACTER_WIDTH;
+}
+
+/**
+ * 延迟创建并复用 canvas 测量上下文，避免每次预览创建 DOM 节点。
+ */
+function getTextMeasureContext() {
+  if (textMeasureContext !== void 0) return textMeasureContext;
+  if (typeof document === "undefined") return null;
+
+  const context = document.createElement("canvas").getContext("2d");
+  if (context) context.font = PREVIEW_TEXT_CANVAS_FONT;
+
+  textMeasureContext = context;
+  return textMeasureContext;
 }
 
 /**

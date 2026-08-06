@@ -28,7 +28,6 @@ import {
   resolveDynamicPanelRect,
   resolveEffectivePanelSize,
   resolveMeasurePanelStyle,
-  resolveTextWrapChars,
 } from "./layout";
 import { hasMeasuredPanelSize, useMeasuredPanelSize } from "./measurement";
 import { usePreviewMotion } from "./motion";
@@ -81,7 +80,6 @@ const Preview: FC = () => {
   const panelRect = visibleState
     ? resolveDynamicPanelRect(visibleState.layout, effectivePanelSize)
     : EMPTY_RECT;
-  const textWrapChars = resolveTextWrapChars(panelRect.width);
   const panelMeasureStyle = visibleState
     ? resolveMeasurePanelStyle(visibleState.layout)
     : void 0;
@@ -181,7 +179,7 @@ const Preview: FC = () => {
 
         {shouldRenderMeasuredContent(payload) && (
           <div className="min-h-0">
-            <PreviewContent payload={payload} textWrapChars={textWrapChars} />
+            <PreviewContent payload={payload} />
           </div>
         )}
       </div>
@@ -202,7 +200,7 @@ const Preview: FC = () => {
               "opacity-60": isLoading && payload !== null,
             })}
           >
-            <PreviewContent payload={payload} textWrapChars={textWrapChars} />
+            <PreviewContent payload={payload} />
           </div>
         </PreviewContentTransition>
 

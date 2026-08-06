@@ -1,7 +1,7 @@
 import { getName, getVersion } from "@tauri-apps/api/app";
 import { useMount } from "ahooks";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import type { ChangeEvent, FC } from "react";
+import type { ChangeEvent, FC, MouseEvent as ReactMouseEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSnapshot } from "valtio";
@@ -336,8 +336,15 @@ const Preference: FC = () => {
 
   if (!activeTab) return null;
 
+  const handleContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+  };
+
   return (
-    <div className="h-screen overflow-hidden bg-ant-layout text-ant-text">
+    <div
+      className="h-screen overflow-hidden bg-ant-layout text-ant-text"
+      onContextMenu={handleContextMenu}
+    >
       <motion.div
         animate={{ opacity: 1, y: 0 }}
         className="flex h-full overflow-hidden bg-ant-layout"

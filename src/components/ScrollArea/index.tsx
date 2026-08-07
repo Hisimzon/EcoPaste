@@ -36,7 +36,10 @@ const ScrollArea: FC<ScrollAreaProps> = (props) => {
       defer
       events={{
         initialized(instance) {
-          setViewport(instance.elements().viewport);
+          const { viewport: nextViewport } = instance.elements();
+
+          nextViewport.style.overscrollBehaviorY = "none";
+          setViewport(nextViewport);
         },
       }}
       options={SCROLL_AREA_OPTIONS}

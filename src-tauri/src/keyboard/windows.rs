@@ -17,6 +17,7 @@ use winapi::um::winuser::{
 use super::{NAV_EVENT, SEARCH_INPUT_EVENT};
 
 static NAV_ENABLED: AtomicBool = AtomicBool::new(false);
+static HOOK_RUNNING: AtomicBool = AtomicBool::new(false);
 static HOOK_THREAD_ID: Mutex<Option<u32>> = Mutex::new(None);
 static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 
@@ -111,12 +112,14 @@ fn emit_search_input(action: &str, text: Option<String>) {
 pub fn enable_navigation_keys(app: &AppHandle) {
     let _ = APP_HANDLE.set(app.clone());
     NAV_ENABLED.store(true, Ordering::Relaxed);
+    start_hook_thread();
+}
 
-    // 已有钩子线程时不再起新线程；NAV_ENABLED 的恢复就够了。
-    if HOOK_THREAD_ID
-        .lock()
-        .expect("hook thread id poisoned")
-        .is_some()
+/// 键盘 hook 同一时刻只允许一个线程；旧线程退出期间重新启用时，由退出路径补启动。
+fn start_hook_thread() {
+    if HOOK_RUNNING
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
     {
         return;
     }
@@ -125,14 +128,17 @@ pub fn enable_navigation_keys(app: &AppHandle) {
         let hook = SetWindowsHookExW(WH_KEYBOARD_LL, Some(hook_proc), null_mut(), 0);
         if hook.is_null() {
             log::error!("SetWindowsHookExW failed");
+            HOOK_RUNNING.store(false, Ordering::Release);
             return;
         }
 
         *HOOK_THREAD_ID.lock().expect("hook thread id poisoned") = Some(GetCurrentThreadId());
 
         let mut msg: MSG = std::mem::zeroed();
-        // GetMessageW 收到 WM_QUIT 返回 0 → 消息泵自然退出。
-        while GetMessageW(&mut msg, null_mut(), 0, 0) > 0 {}
+        if NAV_ENABLED.load(Ordering::Acquire) {
+            // GetMessageW 收到 WM_QUIT 返回 0 → 消息泵自然退出。
+            while GetMessageW(&mut msg, null_mut(), 0, 0) > 0 {}
+        }
 
         UnhookWindowsHookEx(hook);
         *HOOK_THREAD_ID.lock().expect("hook thread id poisoned") = None;
@@ -140,6 +146,11 @@ pub fn enable_navigation_keys(app: &AppHandle) {
             .lock()
             .expect("consumed keys poisoned")
             .clear();
+        HOOK_RUNNING.store(false, Ordering::Release);
+
+        if NAV_ENABLED.load(Ordering::Acquire) {
+            start_hook_thread();
+        }
     });
 }
 
@@ -157,10 +168,9 @@ pub fn disable_navigation_keys() {
         }
     }
 
-    let tid = HOOK_THREAD_ID
+    let tid = *HOOK_THREAD_ID
         .lock()
-        .expect("hook thread id poisoned")
-        .take();
+        .expect("hook thread id poisoned");
     if let Some(tid) = tid {
         unsafe {
             PostThreadMessageW(tid, WM_QUIT, 0, 0);

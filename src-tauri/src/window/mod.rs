@@ -60,6 +60,20 @@ pub fn should_auto_hide_clipboard_window() -> bool {
         && !CLIPBOARD_WINDOW_AUTO_HIDE_SUSPENDED.load(Ordering::Relaxed)
 }
 
+/// 返回剪贴板窗口的真实可见状态；Windows 走原生 HWND，macOS 沿用 panel 运行时状态。
+pub fn is_clipboard_window_visible(app_handle: &AppHandle) -> bool {
+    #[cfg(target_os = "windows")]
+    return windows::is_clipboard_window_visible(app_handle);
+
+    #[cfg(target_os = "macos")]
+    {
+        app_handle
+            .get_webview_window(CLIPBOARD_WINDOW_LABEL)
+            .and_then(|window| window.is_visible().ok())
+            .unwrap_or(false)
+    }
+}
+
 /// 设置用户控制的剪贴板窗口固定态。
 pub fn set_clipboard_window_pinned(pinned: bool) {
     CLIPBOARD_WINDOW_PINNED.store(pinned, Ordering::Relaxed);
@@ -180,10 +194,14 @@ pub fn hide_window(app_handle: &AppHandle, label: &str) -> Result<()> {
 
 pub fn toggle_window(app_handle: &AppHandle, label: &str) -> Result<()> {
     // 已销毁的按需窗口（如空闲超时后的 preference）取不到实例，视为不可见 → 走 show 重建。
-    let visible = app_handle
-        .get_webview_window(label)
-        .and_then(|window| window.is_visible().ok())
-        .unwrap_or(false);
+    let visible = if label == CLIPBOARD_WINDOW_LABEL {
+        is_clipboard_window_visible(app_handle)
+    } else {
+        app_handle
+            .get_webview_window(label)
+            .and_then(|window| window.is_visible().ok())
+            .unwrap_or(false)
+    };
     if visible {
         hide_window(app_handle, label)
     } else {
@@ -245,19 +263,8 @@ pub fn intercept_close_request(window: &Window) -> bool {
         return true;
     }
 
-    // 关闭按钮不走 `hide_window`，需在此单独保存几何，否则 preference 的移动/缩放会丢失。
-    if let Err(err) = state::save_window_state(window.app_handle(), window.label()) {
-        log::warn!(
-            "save window state on close failed for {}: {err}",
-            window.label()
-        );
-    }
-
-    if let Err(err) = window.hide() {
+    if let Err(err) = hide_window(window.app_handle(), window.label()) {
         log::error!("hide window on close failed: {err:?}");
-    } else {
-        emit_visibility(window.app_handle(), window.label(), false);
-        lifecycle::on_hidden(window.app_handle(), window.label(), "close");
     }
     true
 }

@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.1.2](https://github.com/EcoPasteHub/EcoPaste/compare/v1.1.0...v1.1.2) (2026-08-07)
+
+### ✨ Features
+
+- Added Windows no-focus pinyin search with manual IME input support.
+- Extended lightweight mode and delayed window cleanup to the main clipboard window.
+- Added cleanup for redundant body-text pinyin indexes when notes are available.
+
+### 🐛 Bug Fixes
+
+- Preserved the target window focus when opening EcoPaste and pasting selected records.
+- Fixed text preview wrapping, panel sizing, and excess blank space.
+- Refreshed the clipboard list immediately after clearing or deleting records.
+- Disabled the native context menu in preferences and improved the Windows item menu lifecycle.
+- Skipped missing Windows system autostart entries and aligned Tauri log plugin versions.
+
+### ⚡️ Performance
+
+- Moved pinyin generation and historical index backfill into batched background work.
+- Reduced virtual-list fetching, deletion refresh work, scrolling jank, and hover-preview overhead.
+
 ## [1.1.0](https://github.com/EcoPasteHub/EcoPaste/compare/v1.0.0...v1.1.0) (2026-07-22)
 
 ### ✨ Features

@@ -963,6 +963,7 @@ async fn merge_import(
     let db_path = root.join(DB_ARCHIVE_DIR).join(DB_FILENAME);
     let backup_pool = open_backup_db(&db_path).await?;
     let outcome = merge_history(pool, &backup_pool).await?;
+    crate::db::pinyin::queue_backfill(pool);
     let resources = root.join(RESOURCES_ARCHIVE_DIR);
     let imported_resources =
         copy_dir_missing(&resources, &crate::core::paths::resources_dir(app)?)?;

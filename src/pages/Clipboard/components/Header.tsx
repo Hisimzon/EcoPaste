@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useSnapshot } from "valtio";
 import {
   clearClipboardItems,
+  hideWindow,
   setClipboardWindowPinned,
   showWindow,
 } from "@/commands";
@@ -48,8 +49,9 @@ const Header: FC = () => {
   /**
    * 统一处理偏好设置入口（按钮点击/快捷键）。
    */
-  const handleOpenPreference = () => {
-    return showWindow(WINDOW_LABEL.PREFERENCE);
+  const handleOpenPreference = async () => {
+    await showWindow(WINDOW_LABEL.PREFERENCE);
+    await hideWindow(WINDOW_LABEL.CLIPBOARD);
   };
 
   /**

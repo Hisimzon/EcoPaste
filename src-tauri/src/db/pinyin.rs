@@ -1,12 +1,30 @@
+use std::collections::HashSet;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{LazyLock, Mutex};
+
 use anyhow::Context;
 use pinyin::ToPinyin;
-use sqlx::SqlitePool;
+use sqlx::{QueryBuilder, Sqlite, SqlitePool};
+use tokio::sync::Notify;
 
 use crate::core::Result;
 
 const MAX_SCAN_CHARS: usize = 4096;
 const MAX_PINYIN_CHARS: usize = 200;
 const BACKFILL_BATCH_SIZE: i64 = 100;
+const PINYIN_UPDATE_BATCH_SIZE: usize = 100;
+
+#[derive(Default)]
+struct PendingPinyinWork {
+    full_backfill: bool,
+    ids: HashSet<String>,
+    pool: Option<SqlitePool>,
+}
+
+static PENDING_PINYIN_WORK: LazyLock<Mutex<PendingPinyinWork>> =
+    LazyLock::new(|| Mutex::new(PendingPinyinWork::default()));
+static BACKFILL_NOTIFY: LazyLock<Notify> = LazyLock::new(Notify::new);
+static BACKFILL_WORKER_STARTED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Default)]
 pub struct PinyinIndexCleanupOutcome {
@@ -116,6 +134,8 @@ pub async fn backfill(pool: &SqlitePool) -> Result<()> {
             .await
             .context("failed to update clipboard item pinyin index")?;
         }
+
+        tokio::task::yield_now().await;
     }
 
     Ok(())
@@ -213,54 +233,127 @@ pub async fn compact_noted_item_indexes(pool: &SqlitePool) -> Result<PinyinIndex
     Ok(outcome)
 }
 
+/// 合并高频单条拼音更新请求，由单个后台 worker 分批处理。
 pub fn queue_update(pool: &SqlitePool, id: &str) {
-    let pool = pool.clone();
-    let id = id.to_owned();
+    {
+        let mut pending = PENDING_PINYIN_WORK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        pending.pool = Some(pool.clone());
+        pending.ids.insert(id.to_owned());
+    }
 
-    tokio::spawn(async move {
-        let result = update_one(&pool, &id).await;
-        if let Err(err) = result {
-            log::warn!("failed to update clipboard item pinyin index: {err}");
-        }
-    });
+    start_worker();
+    BACKFILL_NOTIFY.notify_one();
 }
 
-async fn update_one(pool: &SqlitePool, id: &str) -> Result<()> {
-    let row = sqlx::query_as::<_, (Option<String>, Option<String>)>(
-        "SELECT search_text, note FROM clipboard_items WHERE id = ?",
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await
-    .context("failed to load clipboard item for pinyin index")?;
+/// 合并全量拼音回填请求，由单个后台 worker 分批补齐所有缺失索引。
+pub fn queue_backfill(pool: &SqlitePool) {
+    {
+        let mut pending = PENDING_PINYIN_WORK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        pending.full_backfill = true;
+        pending.pool = Some(pool.clone());
+    }
 
-    let Some((search_text, note)) = row else {
+    start_worker();
+    BACKFILL_NOTIFY.notify_one();
+}
+
+fn start_worker() {
+    if !BACKFILL_WORKER_STARTED.swap(true, Ordering::AcqRel) {
+        tokio::spawn(run_backfill_worker());
+    }
+}
+
+async fn run_backfill_worker() {
+    loop {
+        BACKFILL_NOTIFY.notified().await;
+
+        loop {
+            let work = PENDING_PINYIN_WORK
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .take();
+            let Some((pool, full_backfill, ids)) = work else {
+                break;
+            };
+
+            if full_backfill {
+                if let Err(err) = backfill(&pool).await {
+                    log::warn!("failed to backfill pinyin search index: {err}");
+                }
+                continue;
+            }
+
+            for chunk in ids.chunks(PINYIN_UPDATE_BATCH_SIZE) {
+                if let Err(err) = update_items(&pool, chunk).await {
+                    log::warn!("failed to update clipboard item pinyin index: {err}");
+                }
+            }
+        }
+    }
+}
+
+async fn update_items(pool: &SqlitePool, ids: &[String]) -> Result<()> {
+    if ids.is_empty() {
         return Ok(());
-    };
+    }
 
-    let (search_pinyin, search_pinyin_initials) = tokio::task::spawn_blocking({
-        let search_text = search_text.clone();
-        let note = note.clone();
-        move || build_search_index(search_text.as_deref(), note.as_deref())
+    let mut query = QueryBuilder::<Sqlite>::new(
+        "SELECT id, search_text, note FROM clipboard_items WHERE id IN (",
+    );
+    for (index, id) in ids.iter().enumerate() {
+        if index > 0 {
+            query.push(", ");
+        }
+        query.push_bind(id.as_str());
+    }
+    query.push(")");
+
+    let rows = query
+        .build_query_as::<(String, Option<String>, Option<String>)>()
+        .fetch_all(pool)
+        .await
+        .context("failed to load clipboard items for pinyin index")?;
+    let indexed_rows = tokio::task::spawn_blocking(move || {
+        rows.into_iter()
+            .map(|(id, search_text, note)| {
+                let index = build_search_index(search_text.as_deref(), note.as_deref());
+                (id, search_text, note, index)
+            })
+            .collect::<Vec<_>>()
     })
     .await
     .context("pinyin index worker panicked")?;
 
-    sqlx::query(
-        "UPDATE clipboard_items
-         SET search_pinyin = ?, search_pinyin_initials = ?
-         WHERE id = ? AND search_text IS ? AND note IS ?",
-    )
-    .bind(search_pinyin)
-    .bind(search_pinyin_initials)
-    .bind(id)
-    .bind(search_text)
-    .bind(note)
-    .execute(pool)
-    .await
-    .context("failed to save clipboard item pinyin index")?;
+    for (id, search_text, note, (search_pinyin, search_pinyin_initials)) in indexed_rows {
+        sqlx::query(
+            "UPDATE clipboard_items
+             SET search_pinyin = ?, search_pinyin_initials = ?
+             WHERE id = ? AND search_text IS ? AND note IS ?",
+        )
+        .bind(search_pinyin)
+        .bind(search_pinyin_initials)
+        .bind(id)
+        .bind(search_text)
+        .bind(note)
+        .execute(pool)
+        .await
+        .context("failed to save clipboard item pinyin index")?;
+    }
 
     Ok(())
+}
+
+impl PendingPinyinWork {
+    fn take(&mut self) -> Option<(SqlitePool, bool, Vec<String>)> {
+        let pool = self.pool.take()?;
+        let full_backfill = std::mem::take(&mut self.full_backfill);
+        let ids = self.ids.drain().collect();
+        Some((pool, full_backfill, ids))
+    }
 }
 
 #[cfg(test)]

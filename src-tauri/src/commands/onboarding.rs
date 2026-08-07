@@ -12,11 +12,11 @@ use uuid::Uuid;
 use walkdir::WalkDir;
 
 use crate::clipboard::{
-    build_item_with_settings, persist_and_notify, ClipboardPayload, ImagePayload, ImageStore,
-    TextPayload,
+    build_item_with_settings, ClipboardPayload, ImagePayload, ImageStore, TextPayload,
 };
 use crate::core::{AppError, Result};
 use crate::db::DatabaseState;
+use crate::db::items::upsert_item;
 use crate::settings::{Settings, SettingsStore};
 use crate::window;
 
@@ -195,7 +195,7 @@ pub async fn import_legacy_data(
 
         item.is_favorite = is_favorite;
 
-        let result = persist_and_notify(&app, &pool, &item, None).await?;
+        let result = upsert_item(&pool, &item).await?;
         if result.deduplicated {
             skipped += 1;
             continue;

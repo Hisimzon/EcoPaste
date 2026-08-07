@@ -37,6 +37,7 @@ const VirtuosoScroller: FC<VirtuosoScrollerProps> = (props) => {
 
         viewport.style.overflowX = "var(--os-viewport-overflow-x)";
         viewport.style.overflowY = "var(--os-viewport-overflow-y)";
+        viewport.style.overscrollBehaviorY = "none";
       },
     },
     options: VIRTUOSO_SCROLLBAR_OPTIONS,

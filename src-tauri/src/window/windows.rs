@@ -1,12 +1,11 @@
 //! Windows 窗口管理：剪贴板窗口始终不可聚焦，避免破坏外部粘贴目标。
-use std::sync::atomic::{AtomicIsize, Ordering};
-
+use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 use tauri::AppHandle;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{
     GetForegroundWindow, GetWindowLongPtrW, IsWindow, SetForegroundWindow, SetWindowLongPtrW,
-    SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
-    SWP_NOSIZE, SWP_SHOWWINDOW, WS_EX_NOACTIVATE,
+    SetWindowPos, ShowWindow, GWL_EXSTYLE, HWND_TOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE,
+    SWP_NOMOVE, SWP_NOSIZE, SW_HIDE, SW_SHOWNOACTIVATE, WS_EX_NOACTIVATE,
 };
 
 use super::{get_window, CLIPBOARD_WINDOW_LABEL};
@@ -14,6 +13,12 @@ use crate::core::Result;
 use crate::{keyboard, mouse};
 
 static CLIPBOARD_PASTE_TARGET: AtomicIsize = AtomicIsize::new(0);
+static CLIPBOARD_WINDOW_VISIBLE: AtomicBool = AtomicBool::new(false);
+
+/// 返回最新请求的剪贴板窗口可见状态，避免异步 WebView 显隐任务尚未执行时 toggle 误判。
+pub fn is_clipboard_window_visible(_app_handle: &AppHandle) -> bool {
+    CLIPBOARD_WINDOW_VISIBLE.load(Ordering::Acquire)
+}
 
 pub fn show_window(app_handle: &AppHandle, label: &str) -> Result<()> {
     let window = get_window(app_handle, label)?;
@@ -23,10 +28,7 @@ pub fn show_window(app_handle: &AppHandle, label: &str) -> Result<()> {
             .set_focusable(false)
             .map_err(|e| anyhow::anyhow!(e))?;
         apply_no_activate(&window, true)?;
-        window.show().map_err(|e| anyhow::anyhow!(e))?;
-        show_without_activation(&window)?;
-        keyboard::enable_navigation_keys(app_handle);
-        mouse::enable_outside_click_hide(app_handle);
+        show_without_activation(app_handle, &window)?;
     } else {
         window.show().map_err(|e| anyhow::anyhow!(e))?;
         window.unminimize().map_err(|e| anyhow::anyhow!(e))?;
@@ -55,7 +57,7 @@ pub fn set_clipboard_window_editing(app_handle: &AppHandle, editing: bool) -> Re
         return Ok(());
     }
 
-    if window.is_visible().unwrap_or(false) {
+    if is_clipboard_window_visible(app_handle) {
         keyboard::enable_navigation_keys(app_handle);
         mouse::enable_outside_click_hide(app_handle);
     }
@@ -65,16 +67,16 @@ pub fn set_clipboard_window_editing(app_handle: &AppHandle, editing: bool) -> Re
 
 pub fn hide_window(app_handle: &AppHandle, label: &str) -> Result<()> {
     let window = get_window(app_handle, label)?;
-    window.hide().map_err(|e| anyhow::anyhow!(e))?;
     if label == CLIPBOARD_WINDOW_LABEL {
+        hide_without_activation(app_handle, &window)?;
         if let Err(err) = window.set_focusable(false) {
             log::warn!("reset clipboard window focusable on hide failed: {err:?}");
         }
         if let Err(err) = apply_no_activate(&window, true) {
             log::warn!("reset clipboard window no-activate style on hide failed: {err:?}");
         }
-        keyboard::disable_navigation_keys();
-        mouse::disable_outside_click_hide();
+    } else {
+        window.hide().map_err(|e| anyhow::anyhow!(e))?;
     }
 
     Ok(())
@@ -152,21 +154,68 @@ fn apply_no_activate(window: &tauri::WebviewWindow, no_activate: bool) -> Result
     Ok(())
 }
 
-/// 在无激活样式已经生效后显示主窗口，避免快捷键呼出期间抢占前台窗口。
-fn show_without_activation(window: &tauri::WebviewWindow) -> Result<()> {
+/// 在无激活样式已经生效后显示主窗口，并同步 WebView2 可见状态，避免快捷键呼出期间抢占前台窗口。
+fn show_without_activation(app_handle: &AppHandle, window: &tauri::WebviewWindow) -> Result<()> {
     let hwnd = window_hwnd(window)?;
 
-    unsafe {
-        SetWindowPos(
-            hwnd,
-            HWND_TOPMOST,
-            0,
-            0,
-            0,
-            0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
-        )
-        .map_err(|e| anyhow::anyhow!(e))?;
+    set_clipboard_visibility_on_ui_thread(app_handle, window, hwnd, true)
+}
+
+fn hide_without_activation(app_handle: &AppHandle, window: &tauri::WebviewWindow) -> Result<()> {
+    let hwnd = window_hwnd(window)?;
+
+    set_clipboard_visibility_on_ui_thread(app_handle, window, hwnd, false)
+}
+
+/// `with_webview` 可能把 closure 排队到 Tauri UI event loop。快捷键和托盘回调也可能运行
+/// 在该线程，故这里只提交显隐任务，绝不能同步等待 closure，否则主线程会等待自身而死锁。
+fn set_clipboard_visibility_on_ui_thread(
+    app_handle: &AppHandle,
+    window: &tauri::WebviewWindow,
+    hwnd: HWND,
+    visible: bool,
+) -> Result<()> {
+    CLIPBOARD_WINDOW_VISIBLE.store(visible, Ordering::Release);
+
+    if !visible {
+        unsafe {
+            let _ = ShowWindow(hwnd, SW_HIDE);
+        }
+        keyboard::disable_navigation_keys();
+        mouse::disable_outside_click_hide();
+    }
+
+    let app_handle = app_handle.clone();
+
+    let schedule_result = window.with_webview(move |webview| unsafe {
+        if CLIPBOARD_WINDOW_VISIBLE.load(Ordering::Acquire) {
+            if let Err(err) = webview.controller().SetIsVisible(true) {
+                log::warn!("show clipboard webview controller failed: {err:?}");
+            }
+
+            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            keyboard::enable_navigation_keys(&app_handle);
+            mouse::enable_outside_click_hide(&app_handle);
+        } else if let Err(err) = webview.controller().SetIsVisible(false) {
+            log::warn!(
+                "hide clipboard webview controller failed after native hide: {err:?}"
+            );
+        }
+    });
+
+    if let Err(err) = schedule_result {
+        if !visible {
+            log::warn!("sync hidden clipboard webview state failed: {err:?}");
+            return Ok(());
+        }
+
+        CLIPBOARD_WINDOW_VISIBLE.store(false, Ordering::Release);
+        unsafe {
+            let _ = ShowWindow(hwnd, SW_HIDE);
+        }
+        keyboard::disable_navigation_keys();
+        mouse::disable_outside_click_hide();
+        return Err(anyhow::anyhow!(err).into());
     }
 
     Ok(())

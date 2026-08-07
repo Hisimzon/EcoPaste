@@ -137,7 +137,7 @@ pub fn show_clipboard_preview(
 ) -> Result<Option<ClipboardPreviewState>> {
     validate_anchor(&anchor)?;
 
-    if PREVIEW_SUPPRESSED.load(Ordering::SeqCst) || !is_clipboard_window_visible(app) {
+    if PREVIEW_SUPPRESSED.load(Ordering::SeqCst) || !super::is_clipboard_window_visible(app) {
         close_clipboard_preview_now(app)?;
         return Ok(None);
     }
@@ -281,13 +281,6 @@ fn set_preview_state(state: Option<ClipboardPreviewState>) {
         poisoned.into_inner()
     });
     *guard = state;
-}
-
-/// 判断剪贴板窗口是否仍处于可见状态，防止过期 hover 请求在剪贴板窗口隐藏后唤起预览。
-fn is_clipboard_window_visible(app: &AppHandle) -> bool {
-    app.get_webview_window(CLIPBOARD_WINDOW_LABEL)
-        .and_then(|window| window.is_visible().ok())
-        .unwrap_or(false)
 }
 
 /// 延迟隐藏真实窗口，为前端退出动画留出一小段可见时间。

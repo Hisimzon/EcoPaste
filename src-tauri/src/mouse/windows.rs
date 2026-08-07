@@ -14,18 +14,21 @@ use winapi::um::winuser::{
 use crate::window::{self, CLIPBOARD_WINDOW_LABEL};
 
 static ENABLED: AtomicBool = AtomicBool::new(false);
+static HOOK_RUNNING: AtomicBool = AtomicBool::new(false);
 static HOOK_THREAD_ID: Mutex<Option<u32>> = Mutex::new(None);
 static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 
 pub fn enable_outside_click_hide(app: &AppHandle) {
     let _ = APP_HANDLE.set(app.clone());
     ENABLED.store(true, Ordering::Relaxed);
+    start_hook_thread();
+}
 
-    // 已有钩子线程时不再起新线程；ENABLED 的恢复就够了。
-    if HOOK_THREAD_ID
-        .lock()
-        .expect("hook thread id poisoned")
-        .is_some()
+/// 鼠标 hook 同一时刻只允许一个线程；旧线程退出期间重新启用时，由退出路径补启动。
+fn start_hook_thread() {
+    if HOOK_RUNNING
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
     {
         return;
     }
@@ -34,27 +37,34 @@ pub fn enable_outside_click_hide(app: &AppHandle) {
         let hook = SetWindowsHookExW(WH_MOUSE_LL, Some(hook_proc), null_mut(), 0);
         if hook.is_null() {
             log::error!("SetWindowsHookExW(WH_MOUSE_LL) failed");
+            HOOK_RUNNING.store(false, Ordering::Release);
             return;
         }
 
         *HOOK_THREAD_ID.lock().expect("hook thread id poisoned") = Some(GetCurrentThreadId());
 
         let mut msg: MSG = std::mem::zeroed();
-        // GetMessageW 收到 WM_QUIT 返回 0 → 消息泵自然退出。
-        while GetMessageW(&mut msg, null_mut(), 0, 0) > 0 {}
+        if ENABLED.load(Ordering::Acquire) {
+            // GetMessageW 收到 WM_QUIT 返回 0 → 消息泵自然退出。
+            while GetMessageW(&mut msg, null_mut(), 0, 0) > 0 {}
+        }
 
         UnhookWindowsHookEx(hook);
         *HOOK_THREAD_ID.lock().expect("hook thread id poisoned") = None;
+        HOOK_RUNNING.store(false, Ordering::Release);
+
+        if ENABLED.load(Ordering::Acquire) {
+            start_hook_thread();
+        }
     });
 }
 
 pub fn disable_outside_click_hide() {
     ENABLED.store(false, Ordering::Relaxed);
 
-    let tid = HOOK_THREAD_ID
+    let tid = *HOOK_THREAD_ID
         .lock()
-        .expect("hook thread id poisoned")
-        .take();
+        .expect("hook thread id poisoned");
     if let Some(tid) = tid {
         unsafe {
             PostThreadMessageW(tid, WM_QUIT, 0, 0);
@@ -92,7 +102,7 @@ fn cursor_outside_clipboard_window(app: &AppHandle, cursor: POINT) -> bool {
     let Some(window) = app.get_webview_window(CLIPBOARD_WINDOW_LABEL) else {
         return false;
     };
-    if !window.is_visible().unwrap_or(false) {
+    if !window::is_clipboard_window_visible(app) {
         return false;
     }
 
@@ -112,6 +122,10 @@ fn cursor_outside_clipboard_window(app: &AppHandle, cursor: POINT) -> bool {
 fn schedule_hide(app: &AppHandle) {
     let handle = app.clone();
     if let Err(err) = app.run_on_main_thread(move || {
+        if !window::should_auto_hide_clipboard_window() {
+            return;
+        }
+
         if let Err(err) = window::hide_window(&handle, CLIPBOARD_WINDOW_LABEL) {
             log::warn!("auto-hide clipboard window failed: {err}");
         }

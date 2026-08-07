@@ -15,6 +15,7 @@ export interface ClearClipboardItemsOptions {
 export const confirmClearClipboardItems =
   async (): Promise<ClearClipboardItemsOptions | null> => {
     let choices: ClearClipboardItemsChoice[] = [];
+    let result: ClearClipboardItemsOptions | null = null;
 
     const handleChoicesChange = (nextChoices: ClearClipboardItemsChoice[]) => {
       choices = [...nextChoices];
@@ -22,6 +23,9 @@ export const confirmClearClipboardItems =
 
     return await new Promise<ClearClipboardItemsOptions | null>((resolve) => {
       getModalApi().confirm({
+        afterClose: () => {
+          resolve(result);
+        },
         cancelText: i18n.t("common:actions.cancel"),
         centered: true,
         content: (
@@ -41,16 +45,21 @@ export const confirmClearClipboardItems =
             </Checkbox.Group>
           </div>
         ),
+        focusable: {
+          autoFocusButton: null,
+          focusTriggerAfterClose: false,
+          trap: false,
+        },
         okButtonProps: { danger: true },
         okText: i18n.t("common:actions.clear"),
         onCancel: () => {
-          resolve(null);
+          result = null;
         },
         onOk: () => {
-          resolve({
+          result = {
             deleteFavorites: choices.includes("favorites"),
             deletePinned: choices.includes("pinned"),
-          });
+          };
         },
         title: i18n.t("commands:clearConfirm.title"),
       });

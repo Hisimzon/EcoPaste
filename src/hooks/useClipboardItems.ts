@@ -9,6 +9,7 @@ const PAGE_SIZE = 30;
 const PRELOAD_ROWS = 30;
 const CACHE_MAX_ROWS = 180;
 const CACHE_KEEP_RADIUS = 90;
+const DELETE_REFILL_DELAY_MS = 120;
 
 interface ClipboardItemsRange {
   end: number;
@@ -33,6 +34,7 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
   const totalRef = useRef(0);
   const loadingRangesRef = useRef<ClipboardItemsRange[]>([]);
   const loadedInitialRef = useRef(false);
+  const deleteRefillTimerRef = useRef<number | null>(null);
   const viewRangeRef = useRef<ClipboardItemsRange>({
     end: PAGE_SIZE - 1,
     start: 0,
@@ -60,6 +62,13 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
 
   const resetLoadingRanges = useCallback(() => {
     loadingRangesRef.current = [];
+  }, []);
+
+  const cancelDeleteRefill = useCallback(() => {
+    if (deleteRefillTimerRef.current === null) return;
+
+    window.clearTimeout(deleteRefillTimerRef.current);
+    deleteRefillTimerRef.current = null;
   }, []);
 
   const addLoadingRange = useCallback((range: ClipboardItemsRange) => {
@@ -106,14 +115,21 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
         const nextItems = options.replace
           ? new Map<number, ClipboardItem>()
           : new Map(itemsRef.current);
+        let itemsChanged = options.force === true || options.replace === true;
 
         page.list.forEach((item, offset) => {
           const index = range.start + offset;
-          if (index < nextTotal) nextItems.set(index, item);
+          if (index >= nextTotal) return;
+          if (!options.force && !options.replace && nextItems.has(index)) return;
+
+          nextItems.set(index, item);
+          itemsChanged = true;
         });
 
+        const sizeBeforeTrim = nextItems.size;
         trimCache(nextItems, viewRangeRef.current, nextTotal);
-        commitItems(nextItems);
+        if (nextItems.size !== sizeBeforeTrim) itemsChanged = true;
+        if (itemsChanged) commitItems(nextItems);
         commitTotal(nextTotal);
         commitLoadedInitial(true);
       } catch {
@@ -143,6 +159,7 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
   );
 
   const reload = useCallback(() => {
+    cancelDeleteRefill();
     const token = requestTokenRef.current + 1;
     requestTokenRef.current = token;
     resetLoadingRanges();
@@ -163,6 +180,7 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
       token,
     });
   }, [
+    cancelDeleteRefill,
     commitItems,
     commitLoadedInitial,
     commitTotal,
@@ -171,6 +189,7 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
   ]);
 
   const resetAndReload = useCallback(() => {
+    cancelDeleteRefill();
     const token = requestTokenRef.current + 1;
     requestTokenRef.current = token;
     resetLoadingRanges();
@@ -189,6 +208,7 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
       token,
     });
   }, [
+    cancelDeleteRefill,
     commitItems,
     commitLoadedInitial,
     commitTotal,
@@ -197,6 +217,7 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
   ]);
 
   const reloadCurrentRange = useCallback(() => {
+    cancelDeleteRefill();
     const token = requestTokenRef.current + 1;
     requestTokenRef.current = token;
     resetLoadingRanges();
@@ -208,7 +229,21 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
       replace: true,
       token,
     });
-  }, [commitItems, fetchRange, resetLoadingRanges]);
+  }, [cancelDeleteRefill, commitItems, fetchRange, resetLoadingRanges]);
+
+  const scheduleDeleteRefill = useCallback(() => {
+    cancelDeleteRefill();
+    deleteRefillTimerRef.current = window.setTimeout(() => {
+      deleteRefillTimerRef.current = null;
+      void fetchRange(
+        viewRangeRef.current.start,
+        viewRangeRef.current.end,
+        {
+          token: requestTokenRef.current,
+        },
+      );
+    }, DELETE_REFILL_DELAY_MS);
+  }, [cancelDeleteRefill, fetchRange]);
 
   const loadRange = useCallback(
     (startIndex: number, endIndex: number) => {
@@ -283,19 +318,20 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
       }
 
       const nextTotal = Math.max(0, totalRef.current - 1);
+      requestTokenRef.current += 1;
+      resetLoadingRanges();
       trimCache(nextItems, viewRangeRef.current, nextTotal);
       commitItems(nextItems);
       commitTotal(nextTotal);
-      void fetchRange(
-        viewRangeRef.current.start - PRELOAD_ROWS,
-        viewRangeRef.current.end + PRELOAD_ROWS,
-        {
-          force: true,
-          token: requestTokenRef.current,
-        },
-      );
+      scheduleDeleteRefill();
     },
-    [commitItems, commitTotal, fetchRange, getItemIndexById],
+    [
+      commitItems,
+      commitTotal,
+      getItemIndexById,
+      resetLoadingRanges,
+      scheduleDeleteRefill,
+    ],
   );
 
   const patchItemById = useCallback(
@@ -334,6 +370,10 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
     query.pinned,
     query.sort,
   ]);
+
+  useEffect(() => {
+    return cancelDeleteRefill;
+  }, [cancelDeleteRefill]);
 
   return {
     findItemById,

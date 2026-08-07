@@ -1355,9 +1355,12 @@ pub async fn delete_clipboard_item(
 ) -> Result<()> {
     let pool = db.pool().await;
     if let Some(file_name) = crate::db::items::delete_item(&pool, &id).await? {
-        if let Err(err) = store.remove(&file_name) {
-            log::warn!("remove deleted image {file_name} failed: {err}");
-        }
+        let store = store.inner().clone();
+        tokio::task::spawn_blocking(move || {
+            if let Err(err) = store.remove(&file_name) {
+                log::warn!("remove deleted image {file_name} failed: {err}");
+            }
+        });
     }
     Ok(())
 }

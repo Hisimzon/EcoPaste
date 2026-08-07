@@ -881,7 +881,7 @@ const List: FC = () => {
       <Virtuoso
         atTopStateChange={handleAtTopStateChange}
         components={{ TopItemList }}
-        computeItemKey={computeItemKey}
+        computeItemKey={getItemKey}
         isScrolling={handleScrollingChange}
         itemContent={renderItemContent}
         rangeChanged={handleRangeChanged}
@@ -891,6 +891,10 @@ const List: FC = () => {
         totalCount={total}
       />
     );
+  }
+
+  function getItemKey(index: number) {
+    return getItem(index)?.id ?? `placeholder-${index}`;
   }
 
   function renderItemContent(index: number) {
@@ -1418,10 +1422,6 @@ function shouldUseNativeCopy(event: KeyboardEvent) {
 
   return Boolean(selection && !selection.isCollapsed);
 }
-
-const computeItemKey = (index: number, item?: ClipboardItem) => {
-  return item?.id ?? `placeholder-${index}`;
-};
 
 /**
  * Virtuoso 的置顶项会 sticky 覆盖滚动内容；这里补实底色避免下方条目透出。

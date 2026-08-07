@@ -7,6 +7,7 @@ import { useSnapshot } from "valtio";
 import {
   clearClipboardItems,
   hideWindow,
+  setClipboardWindowAutoHideSuspended,
   setClipboardWindowPinned,
   showWindow,
 } from "@/commands";
@@ -58,7 +59,13 @@ const Header: FC = () => {
    * 清空剪贴板历史；确认、toast 与后端调用统一收口在命令包装内。
    */
   const handleClearClipboardItems = async () => {
-    await clearClipboardItems();
+    await setClipboardWindowAutoHideSuspended(true);
+
+    try {
+      await clearClipboardItems();
+    } finally {
+      await setClipboardWindowAutoHideSuspended(false);
+    }
   };
 
   /**

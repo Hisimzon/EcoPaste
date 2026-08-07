@@ -991,6 +991,13 @@ const List: FC = () => {
     };
 
     const handleMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest("button, input, textarea, select, a, [contenteditable='true']")
+      ) {
+        return;
+      }
+
       if (event.button !== 0) {
         if (event.button !== 1) return;
 

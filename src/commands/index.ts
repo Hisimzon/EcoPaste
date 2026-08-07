@@ -1326,10 +1326,16 @@ export const setClipboardWindowAutoHideSuspended = (suspended: boolean) => {
 /**
  * Windows 剪贴板窗口输入编辑模式：输入控件激活期间临时可聚焦，编辑结束后恢复不可聚焦。
  */
-export const setClipboardWindowEditing = async (editing: boolean) => {
+export type ClipboardWindowEditingOwner = "editableFocus" | "noteModal";
+
+export const setClipboardWindowEditing = async (
+  editing: boolean,
+  owner: ClipboardWindowEditingOwner = "editableFocus",
+) => {
   try {
     await invoke<void>(TAURI_COMMAND.SET_CLIPBOARD_WINDOW_EDITING, {
       editing,
+      owner,
     });
   } catch (error) {
     log.error("set clipboard window editing failed", toAppError(error));

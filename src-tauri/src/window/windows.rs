@@ -1,5 +1,5 @@
 //! Windows 窗口管理：剪贴板窗口始终不可聚焦，避免破坏外部粘贴目标。
-use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU64, Ordering};
 use tauri::AppHandle;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -14,6 +14,7 @@ use crate::{keyboard, mouse};
 
 static CLIPBOARD_PASTE_TARGET: AtomicIsize = AtomicIsize::new(0);
 static CLIPBOARD_WINDOW_VISIBLE: AtomicBool = AtomicBool::new(false);
+static CLIPBOARD_VISIBILITY_REQUEST: AtomicU64 = AtomicU64::new(0);
 
 /// 返回最新请求的剪贴板窗口可见状态，避免异步 WebView 显隐任务尚未执行时 toggle 误判。
 pub fn is_clipboard_window_visible(_app_handle: &AppHandle) -> bool {
@@ -24,9 +25,6 @@ pub fn show_window(app_handle: &AppHandle, label: &str) -> Result<()> {
     let window = get_window(app_handle, label)?;
     if label == CLIPBOARD_WINDOW_LABEL {
         remember_clipboard_paste_target(&window)?;
-        window
-            .set_focusable(false)
-            .map_err(|e| anyhow::anyhow!(e))?;
         apply_no_activate(&window, true)?;
         show_without_activation(app_handle, &window)?;
     } else {
@@ -45,15 +43,12 @@ pub fn set_clipboard_window_editing(app_handle: &AppHandle, editing: bool) -> Re
         remember_clipboard_paste_target(&window)?;
     }
 
-    window
-        .set_focusable(editing)
-        .map_err(|e| anyhow::anyhow!(e))?;
-
+    // 窗口显隐由原生 ShowWindow 管理，tao 的内部 VISIBLE flag 不会同步。
+    // 此处若调用 set_focusable，tao 会因内部仍是隐藏态而执行 SW_HIDE。
     apply_no_activate(&window, !editing)?;
 
     if editing {
         keyboard::disable_navigation_keys();
-        window.set_focus().map_err(|e| anyhow::anyhow!(e))?;
         return Ok(());
     }
 
@@ -69,9 +64,6 @@ pub fn hide_window(app_handle: &AppHandle, label: &str) -> Result<()> {
     let window = get_window(app_handle, label)?;
     if label == CLIPBOARD_WINDOW_LABEL {
         hide_without_activation(app_handle, &window)?;
-        if let Err(err) = window.set_focusable(false) {
-            log::warn!("reset clipboard window focusable on hide failed: {err:?}");
-        }
         if let Err(err) = apply_no_activate(&window, true) {
             log::warn!("reset clipboard window no-activate style on hide failed: {err:?}");
         }
@@ -175,6 +167,7 @@ fn set_clipboard_visibility_on_ui_thread(
     hwnd: HWND,
     visible: bool,
 ) -> Result<()> {
+    let request = CLIPBOARD_VISIBILITY_REQUEST.fetch_add(1, Ordering::AcqRel) + 1;
     CLIPBOARD_WINDOW_VISIBLE.store(visible, Ordering::Release);
 
     if !visible {
@@ -188,6 +181,10 @@ fn set_clipboard_visibility_on_ui_thread(
     let app_handle = app_handle.clone();
 
     let schedule_result = window.with_webview(move |webview| unsafe {
+        if CLIPBOARD_VISIBILITY_REQUEST.load(Ordering::Acquire) != request {
+            return;
+        }
+
         if CLIPBOARD_WINDOW_VISIBLE.load(Ordering::Acquire) {
             if let Err(err) = webview.controller().SetIsVisible(true) {
                 log::warn!("show clipboard webview controller failed: {err:?}");
@@ -209,7 +206,9 @@ fn set_clipboard_visibility_on_ui_thread(
             return Ok(());
         }
 
-        CLIPBOARD_WINDOW_VISIBLE.store(false, Ordering::Release);
+        if CLIPBOARD_VISIBILITY_REQUEST.load(Ordering::Acquire) == request {
+            CLIPBOARD_WINDOW_VISIBLE.store(false, Ordering::Release);
+        }
         unsafe {
             let _ = ShowWindow(hwnd, SW_HIDE);
         }

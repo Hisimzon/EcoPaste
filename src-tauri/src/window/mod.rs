@@ -12,7 +12,7 @@ pub mod windows;
 pub use macos::handle_reopen;
 pub use state::WindowStateStore;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{LazyLock, Mutex};
 
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window};
@@ -48,6 +48,26 @@ struct PreferenceHighlightPayload {
 static CLIPBOARD_WINDOW_PINNED: AtomicBool = AtomicBool::new(false);
 /// 剪贴板窗口自动隐藏的临时暂停状态，用于系统文件选择等会短暂转移焦点的原生交互。
 static CLIPBOARD_WINDOW_AUTO_HIDE_SUSPENDED: AtomicBool = AtomicBool::new(false);
+/// Windows 剪贴板窗口当前的输入模式所有者；只有全部释放后才恢复自动隐藏。
+static CLIPBOARD_WINDOW_EDITING_OWNERS: AtomicU8 = AtomicU8::new(0);
+static CLIPBOARD_WINDOW_EDITING_LOCK: Mutex<()> = Mutex::new(());
+
+#[derive(Clone, Copy, Debug, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ClipboardWindowEditingOwner {
+    #[default]
+    EditableFocus,
+    NoteModal,
+}
+
+impl ClipboardWindowEditingOwner {
+    const fn bit(self) -> u8 {
+        match self {
+            Self::EditableFocus => 1 << 0,
+            Self::NoteModal => 1 << 1,
+        }
+    }
+}
 
 /// 返回用户是否显式固定剪贴板窗口；复制后隐藏等路径仍需读取这个用户态开关。
 pub fn is_clipboard_window_pinned() -> bool {
@@ -58,6 +78,7 @@ pub fn is_clipboard_window_pinned() -> bool {
 pub fn should_auto_hide_clipboard_window() -> bool {
     !CLIPBOARD_WINDOW_PINNED.load(Ordering::Relaxed)
         && !CLIPBOARD_WINDOW_AUTO_HIDE_SUSPENDED.load(Ordering::Relaxed)
+        && CLIPBOARD_WINDOW_EDITING_OWNERS.load(Ordering::Relaxed) == 0
 }
 
 /// 返回剪贴板窗口的真实可见状态；Windows 走原生 HWND，macOS 沿用 panel 运行时状态。
@@ -84,14 +105,49 @@ pub fn set_clipboard_window_auto_hide_suspended(suspended: bool) {
     CLIPBOARD_WINDOW_AUTO_HIDE_SUSPENDED.store(suspended, Ordering::Relaxed);
 }
 
-pub fn set_clipboard_window_editing(app_handle: &AppHandle, editing: bool) -> Result<()> {
+pub fn set_clipboard_window_editing(
+    app_handle: &AppHandle,
+    editing: bool,
+    owner: ClipboardWindowEditingOwner,
+) -> Result<()> {
     #[cfg(target_os = "windows")]
-    return windows::set_clipboard_window_editing(app_handle, editing);
+    {
+        let _guard = CLIPBOARD_WINDOW_EDITING_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let previous = CLIPBOARD_WINDOW_EDITING_OWNERS.load(Ordering::Relaxed);
+        let owner_bit = owner.bit();
+        let next = if editing {
+            previous | owner_bit
+        } else {
+            previous & !owner_bit
+        };
+
+        if previous == next {
+            return Ok(());
+        }
+
+        CLIPBOARD_WINDOW_EDITING_OWNERS.store(next, Ordering::Relaxed);
+
+        let editable_focus_bit = ClipboardWindowEditingOwner::EditableFocus.bit();
+        let previous_editing = previous & editable_focus_bit != 0;
+        let next_editing = next & editable_focus_bit != 0;
+        if previous_editing == next_editing {
+            return Ok(());
+        }
+
+        let result = windows::set_clipboard_window_editing(app_handle, next_editing);
+        if result.is_err() {
+            CLIPBOARD_WINDOW_EDITING_OWNERS.store(previous, Ordering::Relaxed);
+        }
+        return result;
+    }
 
     #[cfg(target_os = "macos")]
     {
         let _ = app_handle;
         let _ = editing;
+        let _ = owner;
 
         Ok(())
     }
@@ -186,6 +242,9 @@ pub fn hide_window(app_handle: &AppHandle, label: &str) -> Result<()> {
     #[cfg(target_os = "windows")]
     let result = windows::hide_window(app_handle, label);
     if result.is_ok() {
+        if label == CLIPBOARD_WINDOW_LABEL {
+            CLIPBOARD_WINDOW_EDITING_OWNERS.store(0, Ordering::Relaxed);
+        }
         emit_visibility(app_handle, label, false);
         lifecycle::on_hidden(app_handle, label, "hide");
     }

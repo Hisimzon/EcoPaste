@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.3](https://github.com/EcoPasteHub/EcoPaste/compare/v1.1.2...v1.1.3) (2026-08-07)
+
+### 🐛 Bug Fixes
+
+- Stabilized the Windows clipboard window after repeated show, hide, and long-running sessions.
+- Hid the clipboard window after opening preferences.
+- Prevented the clear-history confirmation from stealing external focus or hiding the clipboard window.
+
 ## [1.1.2](https://github.com/EcoPasteHub/EcoPaste/compare/v1.1.0...v1.1.2) (2026-08-07)
 
 ### ✨ Features

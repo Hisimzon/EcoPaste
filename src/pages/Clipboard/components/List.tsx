@@ -241,7 +241,7 @@ const List: FC = () => {
           0,
         );
       }
-      requestReloadAtTop();
+      reload();
       return;
     }
 

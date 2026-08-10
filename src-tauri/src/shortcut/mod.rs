@@ -8,12 +8,16 @@ use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
+#[cfg(target_os = "windows")]
+use tauri_plugin_global_shortcut::Modifiers;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutEvent, ShortcutState};
 
 use crate::core::{AppError, Result};
 use crate::settings::{SettingsStore, Shortcuts};
 use crate::window::{self, CLIPBOARD_WINDOW_LABEL, PREFERENCE_WINDOW_LABEL};
 
+#[cfg(target_os = "windows")]
+mod mask_key;
 #[cfg(target_os = "windows")]
 mod win_v;
 
@@ -234,18 +238,27 @@ fn register_one(app: &AppHandle, action: &'static str, binding: &str) -> Result<
     }
 
     plugin
-        .on_shortcut(shortcut, move |app, _scut, event| {
-            handle_event(app, action, event);
+        .on_shortcut(shortcut, move |app, shortcut, event| {
+            handle_event(app, action, shortcut, event);
         })
         .map_err(|err| AppError::Other(anyhow::anyhow!(err)))?;
     Ok(shortcut)
 }
 
-fn handle_event(app: &AppHandle, action: &'static str, event: ShortcutEvent) {
+fn handle_event(app: &AppHandle, action: &'static str, shortcut: &Shortcut, event: ShortcutEvent) {
     // Pressed 触发一次即可（Released 是按键松开），避免 toggle 在按下/松开各执行一次回弹。
     if !matches!(event.state(), ShortcutState::Pressed) {
         return;
     }
+
+    #[cfg(target_os = "windows")]
+    if shortcut.mods.contains(Modifiers::ALT) {
+        mask_key::suppress_alt_menu_activation(shortcut.mods);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    let _ = shortcut;
+
     let label = match action {
         "open_clipboard" => CLIPBOARD_WINDOW_LABEL,
         "open_preference" => PREFERENCE_WINDOW_LABEL,

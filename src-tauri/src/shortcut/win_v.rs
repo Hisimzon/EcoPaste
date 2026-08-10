@@ -15,19 +15,16 @@ use tauri::AppHandle;
 use winapi::shared::minwindef::{LPARAM, LRESULT, UINT, WPARAM};
 use winapi::um::processthreadsapi::GetCurrentThreadId;
 use winapi::um::winuser::{
-    CallNextHookEx, GetAsyncKeyState, GetMessageW, PostThreadMessageW, SendInput,
-    SetWindowsHookExW, UnhookWindowsHookEx, INPUT, INPUT_KEYBOARD, KBDLLHOOKSTRUCT, KEYBDINPUT,
-    KEYEVENTF_KEYUP, LLKHF_INJECTED, MSG, VK_LWIN, VK_RWIN, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP,
-    WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP,
+    CallNextHookEx, GetAsyncKeyState, GetMessageW, PostThreadMessageW, SetWindowsHookExW,
+    UnhookWindowsHookEx, KBDLLHOOKSTRUCT, LLKHF_INJECTED, MSG, VK_LWIN, VK_RWIN, WH_KEYBOARD_LL,
+    WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP,
 };
 
+use super::mask_key;
 use crate::window::{self, CLIPBOARD_WINDOW_LABEL};
 
 /// V 键的虚拟键码，winapi 未直接导出。
 const VK_V: u32 = 0x56;
-/// 注入给系统的占位键：`0xE8` 是未分配 VK（AutoHotkey 的 menu-mask key 同款），
-/// 注入它无实际副作用，却能让 shell 认为 Win 按住期间有过其它输入，从而不弹开始菜单。
-const VK_DUMMY: u16 = 0xE8;
 
 static ENABLED: AtomicBool = AtomicBool::new(false);
 static V_CONSUMED: AtomicBool = AtomicBool::new(false);
@@ -125,7 +122,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
             return 1;
         }
 
-        suppress_start_menu();
+        mask_key::suppress_menu_activation();
         schedule_toggle();
 
         return 1;
@@ -137,46 +134,6 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
     }
 
     CallNextHookEx(null_mut(), code, wparam, lparam)
-}
-
-/// 注入一次占位键的按下/抬起，打断「Win 单击」语义，阻止系统在 Win 抬起时弹开始菜单。
-fn suppress_start_menu() {
-    let mut inputs: [INPUT; 2] = unsafe { std::mem::zeroed() };
-
-    inputs[0].type_ = INPUT_KEYBOARD;
-    unsafe {
-        *inputs[0].u.ki_mut() = KEYBDINPUT {
-            wVk: VK_DUMMY,
-            wScan: 0,
-            dwFlags: 0,
-            time: 0,
-            dwExtraInfo: 0,
-        };
-    }
-    inputs[1].type_ = INPUT_KEYBOARD;
-    unsafe {
-        *inputs[1].u.ki_mut() = KEYBDINPUT {
-            wVk: VK_DUMMY,
-            wScan: 0,
-            dwFlags: KEYEVENTF_KEYUP,
-            time: 0,
-            dwExtraInfo: 0,
-        };
-    }
-
-    let sent = unsafe {
-        SendInput(
-            inputs.len() as u32,
-            inputs.as_mut_ptr(),
-            std::mem::size_of::<INPUT>() as i32,
-        )
-    };
-    if sent as usize != inputs.len() {
-        log::warn!(
-            "inject start-menu suppress key sent {sent}/{}",
-            inputs.len()
-        );
-    }
 }
 
 /// 钩子线程不能直接操作窗口，回到主线程 toggle 剪贴板窗口。

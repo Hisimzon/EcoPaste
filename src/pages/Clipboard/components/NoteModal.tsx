@@ -2,10 +2,7 @@ import { type GetRef, Input, Modal } from "antd";
 import type { ChangeEvent, FC, MouseEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  setClipboardWindowEditing,
-  updateClipboardItemNote,
-} from "@/commands";
+import { setClipboardWindowEditing, updateClipboardItemNote } from "@/commands";
 import { prepareClipboardWindowEditableFocus } from "@/hooks/useClipboardWindowEditableFocus";
 import type { ClipboardItem } from "@/types/clipboard";
 import { isWinClipboardWindow } from "@/utils/is";
@@ -28,7 +25,6 @@ interface NoteModalProps {
    */
   onSaved: (id: string, note: string | null, autoFavorited: boolean) => void;
 }
-
 
 /**
  * 备注编辑弹窗（列表层单例）。确定时调用 `update_clipboard_item_note`，
@@ -60,6 +56,9 @@ const NoteModal: FC<NoteModalProps> = (props) => {
     setValue(event.target.value);
   };
 
+  /**
+   * 用户明确点击备注框后，先允许并激活 Windows 原生窗口，再聚焦 textarea。
+   */
   const activateNoteInput = async () => {
     await prepareClipboardWindowEditableFocus();
 
@@ -68,6 +67,9 @@ const NoteModal: FC<NoteModalProps> = (props) => {
     });
   };
 
+  /**
+   * 首次点击时阻止 WebView 在原生窗口激活前执行无效聚焦；已聚焦后保留正常光标操作。
+   */
   const handleMouseDown = (event: MouseEvent<HTMLTextAreaElement>) => {
     if (!isWindowsNoFocus) return;
     if (document.activeElement === event.currentTarget) return;
@@ -95,7 +97,6 @@ const NoteModal: FC<NoteModalProps> = (props) => {
       setSaving(false);
     }
   };
-
 
   return (
     <Modal

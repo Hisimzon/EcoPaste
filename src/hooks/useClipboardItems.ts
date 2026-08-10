@@ -188,7 +188,7 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
     resetLoadingRanges,
   ]);
 
-  const resetAndReload = useCallback(() => {
+  const clearItems = useCallback(() => {
     cancelDeleteRefill();
     const token = requestTokenRef.current + 1;
     requestTokenRef.current = token;
@@ -201,20 +201,24 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
       end: PAGE_SIZE - 1,
       start: 0,
     };
+  }, [
+    cancelDeleteRefill,
+    commitItems,
+    commitLoadedInitial,
+    commitTotal,
+    resetLoadingRanges,
+  ]);
+
+  const resetAndReload = useCallback(() => {
+    clearItems();
+    const token = requestTokenRef.current;
 
     void fetchRange(0, PAGE_SIZE - 1, {
       force: true,
       replace: true,
       token,
     });
-  }, [
-    cancelDeleteRefill,
-    commitItems,
-    commitLoadedInitial,
-    commitTotal,
-    fetchRange,
-    resetLoadingRanges,
-  ]);
+  }, [clearItems, fetchRange]);
 
   const reloadCurrentRange = useCallback(() => {
     cancelDeleteRefill();
@@ -231,19 +235,21 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
     });
   }, [cancelDeleteRefill, commitItems, fetchRange, resetLoadingRanges]);
 
-  const scheduleDeleteRefill = useCallback(() => {
-    cancelDeleteRefill();
-    deleteRefillTimerRef.current = window.setTimeout(() => {
-      deleteRefillTimerRef.current = null;
-      void fetchRange(
-        viewRangeRef.current.start,
-        viewRangeRef.current.end,
-        {
+  /**
+   * 延后补齐删除时的可视范围，避免定时器追随用户后续滚动并在滚动中触发额外渲染。
+   */
+  const scheduleDeleteRefill = useCallback(
+    (range: ClipboardItemsRange) => {
+      cancelDeleteRefill();
+      deleteRefillTimerRef.current = window.setTimeout(() => {
+        deleteRefillTimerRef.current = null;
+        void fetchRange(range.start, range.end, {
           token: requestTokenRef.current,
-        },
-      );
-    }, DELETE_REFILL_DELAY_MS);
-  }, [cancelDeleteRefill, fetchRange]);
+        });
+      }, DELETE_REFILL_DELAY_MS);
+    },
+    [cancelDeleteRefill, fetchRange],
+  );
 
   const loadRange = useCallback(
     (startIndex: number, endIndex: number) => {
@@ -323,7 +329,7 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
       trimCache(nextItems, viewRangeRef.current, nextTotal);
       commitItems(nextItems);
       commitTotal(nextTotal);
-      scheduleDeleteRefill();
+      scheduleDeleteRefill({ ...viewRangeRef.current });
     },
     [
       commitItems,
@@ -376,6 +382,7 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
   }, [cancelDeleteRefill]);
 
   return {
+    clearItems,
     findItemById,
     getItem,
     getItemIndexById,
@@ -386,6 +393,7 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
     reload,
     reloadCurrentRange,
     removeItemById,
+    resetAndReload,
     total,
   };
 };

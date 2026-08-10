@@ -69,6 +69,9 @@ const KEY_HINTS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
 
 interface ClipboardUpdatedPayload {
   cleanup?: number;
+  cleanupFailed?: boolean;
+  cleanupFinished?: boolean;
+  cleanupStarted?: boolean;
   deduplicated?: boolean;
   id?: string;
   imported?: boolean;
@@ -133,6 +136,7 @@ const List: FC = () => {
   const currentGroupName = getCurrentGroupName(customGroups, groupId);
 
   const {
+    clearItems,
     findItemById,
     getItem,
     getItemIndexById,
@@ -143,6 +147,7 @@ const List: FC = () => {
     reload,
     reloadCurrentRange,
     removeItemById,
+    resetAndReload,
     total,
   } = useClipboardItems({
     favorite: range === "favorite" ? true : void 0,
@@ -225,6 +230,33 @@ const List: FC = () => {
    * 用 ref 读取最新滚动位置，规避闭包陷旧值（事件订阅只挂载一次）。
    */
   const handleClipboardUpdated = (payload: ClipboardUpdatedPayload) => {
+    if (payload.cleanupStarted) {
+      closePreview("cleanupStarted");
+      setSelectedId(null);
+      deferredReloadRef.current = false;
+      clearItems();
+      return;
+    }
+
+    if (payload.cleanupFailed) {
+      resetAndReload();
+      return;
+    }
+
+    if (payload.cleanupFinished && payload.cleanup !== void 0) {
+      closePreview("cleanup");
+      setSelectedId(null);
+      deferredReloadRef.current = false;
+      if (clipboardStatsState.total !== null) {
+        clipboardStatsState.total = Math.max(
+          clipboardStatsState.total - payload.cleanup,
+          0,
+        );
+      }
+      resetAndReload();
+      return;
+    }
+
     // 剪贴板窗口隐藏（冻结态）期间不立即 reload：只记 pending，避免隐藏期间频繁复制触发反复 IPC + 重渲染。
     if (!clipboardWindowVisibleRef.current) {
       deferredReloadRef.current = true;

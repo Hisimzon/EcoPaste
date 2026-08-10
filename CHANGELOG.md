@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.4](https://github.com/EcoPasteHub/EcoPaste/compare/v1.1.3...v1.1.4) (2026-08-10)
+
+### 🐛 Bug Fixes
+
+- Suppressed Windows menu activation when invoking Alt-based global shortcuts.
+- Focused the note editor on the first explicit click without changing no-focus window activation.
+- Preserved the clipboard editing window and removed blank overscroll at the top of the list.
+
 ## [1.1.3](https://github.com/EcoPasteHub/EcoPaste/compare/v1.1.2...v1.1.3) (2026-08-07)
 
 ### 🐛 Bug Fixes

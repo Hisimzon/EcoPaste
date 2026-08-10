@@ -1,12 +1,16 @@
-import { Input, Modal } from "antd";
-import type { ChangeEvent, FC } from "react";
-import { useEffect, useState } from "react";
+import { type GetRef, Input, Modal } from "antd";
+import type { ChangeEvent, FC, MouseEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   setClipboardWindowEditing,
   updateClipboardItemNote,
 } from "@/commands";
+import { prepareClipboardWindowEditableFocus } from "@/hooks/useClipboardWindowEditableFocus";
 import type { ClipboardItem } from "@/types/clipboard";
+import { isWinClipboardWindow } from "@/utils/is";
+
+type TextAreaRef = GetRef<typeof Input.TextArea>;
 
 interface NoteModalProps {
   /**
@@ -36,6 +40,8 @@ const NoteModal: FC<NoteModalProps> = (props) => {
 
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
+  const inputRef = useRef<TextAreaRef>(null);
+  const isWindowsNoFocus = isWinClipboardWindow();
 
   // item 引用稳定，仅在打开新目标时变化：据此把输入框重置为该条已有备注。
   useEffect(() => {
@@ -52,6 +58,24 @@ const NoteModal: FC<NoteModalProps> = (props) => {
 
   const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     setValue(event.target.value);
+  };
+
+  const activateNoteInput = async () => {
+    await prepareClipboardWindowEditableFocus();
+
+    requestAnimationFrame(() => {
+      inputRef.current?.focus({ cursor: "end" });
+    });
+  };
+
+  const handleMouseDown = (event: MouseEvent<HTMLTextAreaElement>) => {
+    if (!isWindowsNoFocus) return;
+    if (document.activeElement === event.currentTarget) return;
+    if (event.defaultPrevented) return;
+    if (event.button !== 0 || !event.nativeEvent.isTrusted) return;
+
+    event.preventDefault();
+    void activateNoteInput();
   };
 
   const handleSave = async () => {
@@ -87,7 +111,9 @@ const NoteModal: FC<NoteModalProps> = (props) => {
         autoSize={{ maxRows: 6, minRows: 3 }}
         maxLength={256}
         onChange={handleChange}
+        onMouseDown={handleMouseDown}
         placeholder={t("clipboard:note.placeholder")}
+        ref={inputRef}
         value={value}
       />
     </Modal>

@@ -48,6 +48,13 @@ pub fn set_clipboard_window_editing(app_handle: &AppHandle, editing: bool) -> Re
     apply_no_activate(&window, !editing)?;
 
     if editing {
+        let hwnd = window_hwnd(&window)?;
+        let foreground_hwnd = unsafe { GetForegroundWindow() };
+        if foreground_hwnd != hwnd && !unsafe { SetForegroundWindow(hwnd) }.as_bool() {
+            apply_no_activate(&window, true)?;
+            return Err(anyhow::anyhow!("activate clipboard window for editing").into());
+        }
+
         keyboard::disable_navigation_keys();
         return Ok(());
     }
@@ -194,9 +201,7 @@ fn set_clipboard_visibility_on_ui_thread(
             keyboard::enable_navigation_keys(&app_handle);
             mouse::enable_outside_click_hide(&app_handle);
         } else if let Err(err) = webview.controller().SetIsVisible(false) {
-            log::warn!(
-                "hide clipboard webview controller failed after native hide: {err:?}"
-            );
+            log::warn!("hide clipboard webview controller failed after native hide: {err:?}");
         }
     });
 

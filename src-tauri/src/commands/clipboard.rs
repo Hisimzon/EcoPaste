@@ -1365,7 +1365,7 @@ pub async fn delete_clipboard_item(
     Ok(())
 }
 
-/// 清空全部历史记录，立即广播列表刷新事件，再删除对应图片资源。
+/// 清空全部历史记录：先通知前端进入清空态，完成数据库删除后再刷新保留项，最后删除图片资源。
 #[tauri::command]
 pub async fn clear_clipboard_items(
     app: AppHandle,
@@ -1375,12 +1375,31 @@ pub async fn clear_clipboard_items(
     delete_pinned: bool,
 ) -> Result<u64> {
     let pool = db.pool().await;
-    let outcome = clear_items(&pool, delete_favorites, delete_pinned).await?;
+    if let Err(err) = app.emit(
+        CLIPBOARD_UPDATED_EVENT,
+        serde_json::json!({ "cleanupStarted": true }),
+    ) {
+        log::warn!("emit {CLIPBOARD_UPDATED_EVENT} before clear failed: {err}");
+    }
+
+    let outcome = match clear_items(&pool, delete_favorites, delete_pinned).await {
+        Ok(outcome) => outcome,
+        Err(err) => {
+            if let Err(emit_err) = app.emit(
+                CLIPBOARD_UPDATED_EVENT,
+                serde_json::json!({ "cleanupFailed": true }),
+            ) {
+                log::warn!("emit {CLIPBOARD_UPDATED_EVENT} after clear failure failed: {emit_err}");
+            }
+            return Err(err);
+        }
+    };
 
     if let Err(err) = app.emit(
         CLIPBOARD_UPDATED_EVENT,
         serde_json::json!({
             "cleanup": outcome.removed,
+            "cleanupFinished": true,
         }),
     ) {
         log::warn!("emit {CLIPBOARD_UPDATED_EVENT} after clear failed: {err}");

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.5](https://github.com/EcoPasteHub/EcoPaste/compare/v1.1.4...v1.1.5) (2026-08-10)
+
+### Bug Fixes
+
+- Refreshed the clipboard list immediately after clearing or deleting records.
+- Stabilized delayed deletion refill to avoid unnecessary list reloads while scrolling.
+
 ## [1.1.4](https://github.com/EcoPasteHub/EcoPaste/compare/v1.1.3...v1.1.4) (2026-08-10)
 
 ### 🐛 Bug Fixes

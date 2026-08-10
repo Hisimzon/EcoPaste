@@ -1,5 +1,12 @@
 # 更新日志
 
+## [1.1.5](https://github.com/EcoPasteHub/EcoPaste/compare/v1.1.4...v1.1.5) (2026-08-10)
+
+### 问题修复
+
+- 修复清空或删除记录后剪贴板列表刷新延迟的问题。
+- 稳定删除记录后的延迟补页，减少滚动期间不必要的列表重载。
+
 ## [1.1.4](https://github.com/EcoPasteHub/EcoPaste/compare/v1.1.3...v1.1.4) (2026-08-10)
 
 ### 🐛 问题修复

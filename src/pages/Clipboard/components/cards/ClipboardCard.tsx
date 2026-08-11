@@ -1,9 +1,18 @@
-import type { DragEvent, FC, MouseEvent, PointerEvent, Ref } from "react";
-import { useState } from "react";
+import { useUnmount } from "ahooks";
+import type {
+  DragEvent,
+  FC,
+  KeyboardEvent,
+  MouseEvent,
+  PointerEvent,
+  Ref,
+} from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   type ContextMenuPayload,
   popupClipboardItemMenu,
+  setClipboardWindowAutoHideSuspended,
   startDragClipboardItem,
 } from "@/commands";
 import AssetImage from "@/components/AssetImage";
@@ -22,6 +31,10 @@ import TextCard from "./TextCard";
 interface ClipboardCardProps {
   item: ClipboardItem;
   isSelected?: boolean;
+  /**
+   * 列表滚动期间冻结卡片 hover，避免快捷操作和备注内容切换触发重排。
+   */
+  isListScrolling?: boolean;
   /**
    * 快捷键提示字符（"1"–"9" / "0"），存在时在 app 图标上叠加 KeyHint；
    * 按下修饰键（macOS ⌘ / Windows Ctrl）+ 该数字键触发快速粘贴。
@@ -42,6 +55,7 @@ interface ClipboardCardProps {
   onPointerEnter?: (event: PointerEvent<HTMLDivElement>) => void;
   onPointerLeave?: () => void;
   onPointerMove?: (event: PointerEvent<HTMLDivElement>) => void;
+  onActivate?: () => void;
   onMouseDown?: (event: MouseEvent<HTMLDivElement>) => void;
   onAuxClick?: (event: MouseEvent<HTMLDivElement>) => void;
   onDoubleClick?: (event: MouseEvent<HTMLDivElement>) => void;
@@ -68,6 +82,7 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
   const {
     item,
     isSelected,
+    isListScrolling = false,
     hintKey,
     onQuickPaste,
     isLinkActive,
@@ -75,6 +90,7 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
     onPointerEnter,
     onPointerLeave,
     onPointerMove,
+    onActivate,
     onMouseDown,
     onAuxClick,
     onDoubleClick,
@@ -89,6 +105,8 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
   const { kind, sourceAppId, subKind, sourceAppIconPath, sourceAppName } = item;
   const { t } = useTranslation("clipboard");
   const [hovered, setHovered] = useState(false);
+  const pointerDownPositionRef = useRef<{ x: number; y: number } | null>(null);
+  const autoHideSuspendedRef = useRef(false);
   const typeKey = subKind ?? kind;
   const typeLabel = t(`types.${typeKey}`);
   const body = renderBody(item, isLinkActive, onOpenLink);
@@ -110,9 +128,86 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
 
   const handleDragStart = async (event: DragEvent) => {
     event.preventDefault();
+    setAutoHideSuspended(true);
 
     await startDragClipboardItem(item.id);
   };
+
+  const handleDragEnd = () => {
+    pointerDownPositionRef.current = null;
+    setAutoHideSuspended(false);
+  };
+
+  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+
+    if (
+      event.target instanceof Element &&
+      event.target.closest(
+        "button, input, textarea, select, a, [contenteditable='true']",
+      )
+    ) {
+      return;
+    }
+
+    pointerDownPositionRef.current = { x: event.clientX, y: event.clientY };
+  };
+
+  const handlePointerUp = () => {
+    pointerDownPositionRef.current = null;
+    setAutoHideSuspended(false);
+  };
+
+  const handlePointerCancel = () => {
+    pointerDownPositionRef.current = null;
+    setAutoHideSuspended(false);
+  };
+
+  const handleClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (
+      event.target instanceof Element &&
+      event.target.closest(
+        "button, input, textarea, select, a, [contenteditable='true']",
+      )
+    ) {
+      return;
+    }
+
+    onActivate?.();
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+
+    onActivate?.();
+  };
+
+  const handleCardPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const start = pointerDownPositionRef.current;
+    if (start && !autoHideSuspendedRef.current) {
+      const movedX = event.clientX - start.x;
+      const movedY = event.clientY - start.y;
+
+      if (movedX * movedX + movedY * movedY >= 36) {
+        setAutoHideSuspended(true);
+      }
+    }
+
+    onPointerMove?.(event);
+  };
+
+  const setAutoHideSuspended = (suspended: boolean) => {
+    if (autoHideSuspendedRef.current === suspended) return;
+
+    autoHideSuspendedRef.current = suspended;
+    void setClipboardWindowAutoHideSuspended(suspended);
+  };
+
+  useUnmount(() => {
+    if (!autoHideSuspendedRef.current) return;
+
+    void setClipboardWindowAutoHideSuspended(false);
+  });
 
   const handleContextMenu = async (event: MouseEvent) => {
     event.preventDefault();
@@ -137,11 +232,15 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
   };
 
   const handlePointerEnter = (event: PointerEvent<HTMLDivElement>) => {
+    if (isListScrolling) return;
+
     setHovered(true);
     onPointerEnter?.(event);
   };
 
   const handlePointerLeave = () => {
+    if (isListScrolling) return;
+
     setHovered(false);
     onPointerLeave?.();
   };
@@ -158,13 +257,19 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
       )}
       draggable
       onAuxClick={onAuxClick}
+      onClick={handleClick}
       onContextMenu={handleContextMenu}
       onDoubleClick={onDoubleClick}
+      onDragEnd={handleDragEnd}
       onDragStart={handleDragStart}
+      onKeyDown={handleKeyDown}
       onMouseDown={onMouseDown}
+      onPointerCancel={handlePointerCancel}
+      onPointerDown={handlePointerDown}
       onPointerEnter={handlePointerEnter}
       onPointerLeave={handlePointerLeave}
-      onPointerMove={onPointerMove}
+      onPointerMove={handleCardPointerMove}
+      onPointerUp={handlePointerUp}
       ref={rootRef}
       role="option"
       tabIndex={-1}

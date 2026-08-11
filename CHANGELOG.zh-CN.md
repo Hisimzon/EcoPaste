@@ -1,5 +1,12 @@
 # 更新日志
 
+## [1.1.6](https://github.com/EcoPasteHub/EcoPaste/compare/v1.1.5...v1.1.6) (2026-08-11)
+
+### 🐛 问题修复
+
+- 滚动列表时冻结卡片 hover 切换，减少虚拟列表卡顿。
+- 延后普通单击操作并在拖拽期间暂停自动隐藏，修复列表拖拽失败。
+
 ## [1.1.5](https://github.com/EcoPasteHub/EcoPaste/compare/v1.1.4...v1.1.5) (2026-08-10)
 
 ### 问题修复

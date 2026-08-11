@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.6](https://github.com/EcoPasteHub/EcoPaste/compare/v1.1.5...v1.1.6) (2026-08-11)
+
+### Bug Fixes
+
+- Froze card hover transitions while scrolling to reduce virtual list jank.
+- Preserved list dragging by deferring single-click actions and suspending auto-hide during drag.
+
 ## [1.1.5](https://github.com/EcoPasteHub/EcoPaste/compare/v1.1.4...v1.1.5) (2026-08-10)
 
 ### Bug Fixes

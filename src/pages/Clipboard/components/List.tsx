@@ -98,6 +98,7 @@ const List: FC = () => {
   const { t } = useTranslation("clipboard");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
+  const [isListScrolling, setIsListScrolling] = useState(false);
   const [isModifierPressed, setIsModifierPressed] = useState(false);
   const [customGroups, setCustomGroups] = useState<ClipboardGroupRecord[]>([]);
   const [noteTarget, setNoteTarget] = useState<ClipboardItem | null>(null);
@@ -817,6 +818,7 @@ const List: FC = () => {
 
   const handleScrollingChange = (scrolling: boolean) => {
     isListScrollingRef.current = scrolling;
+    setIsListScrolling(scrolling);
     handleListScrollingChange(scrolling);
 
     if (scrolling) return;
@@ -1025,7 +1027,9 @@ const List: FC = () => {
     const handleMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
       if (
         event.target instanceof Element &&
-        event.target.closest("button, input, textarea, select, a, [contenteditable='true']")
+        event.target.closest(
+          "button, input, textarea, select, a, [contenteditable='true']",
+        )
       ) {
         return;
       }
@@ -1066,7 +1070,9 @@ const List: FC = () => {
       }
 
       setSelectedId(item.id);
+    };
 
+    const handleActivate = () => {
       if (autoPaste === "singleClickPaste") {
         closePreview("singleClickPaste");
         pasteClipboardItem(item.id, false);
@@ -1115,12 +1121,14 @@ const List: FC = () => {
           availableActions={availableActions}
           hintKey={hintKey}
           isLinkActive={isModifierPressed}
+          isListScrolling={isListScrolling}
           isSelected={
             selectedId === null
               ? index === firstVisibleIndex
               : item.id === selectedId
           }
           item={item}
+          onActivate={handleActivate}
           onAuxClick={handleAuxClick}
           onContextMenuOpen={handleContextMenuOpen}
           onDoubleClick={handleDoubleClick}

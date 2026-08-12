@@ -54,6 +54,12 @@ fn ensure_ole_init() {
     });
 }
 
+/// 在用户开始拖拽前初始化 OLE，并包装 WebView2 的 drop target。
+pub(crate) fn prepare_window(window: &WebviewWindow) {
+    ensure_ole_init();
+    super::windows_ghost::install_for_window(window);
+}
+
 /// 注册（或返回已缓存的）剪贴板自定义格式 id。同名格式在进程间共享 id。
 fn register_format(name: &str, slot: &'static OnceLock<u16>) -> u16 {
     *slot.get_or_init(|| {
@@ -400,7 +406,7 @@ impl IDropSource_Impl for DropSource {
 /// 启动一次文本 drag-out（plain + 可选 html / rtf）。阻塞至 drop 完成；
 /// 调用方必须在 Tauri 主线程上跑。
 pub fn start_drag_text(
-    window: &WebviewWindow,
+    _window: &WebviewWindow,
     plain: &str,
     html: Option<&str>,
     rtf: Option<&str>,
@@ -411,7 +417,6 @@ pub fn start_drag_text(
     }
 
     ensure_ole_init();
-    super::windows_ghost::install_for_window(window);
 
     let data_object: IDataObject = RichDataObject::new(plain, html, rtf).into();
     let drop_source: IDropSource = DropSource.into();
@@ -436,8 +441,6 @@ pub fn start_drag_files(
     preview_png: Option<Vec<u8>>,
 ) -> Result<()> {
     use drag::{DragItem, Image, Options};
-
-    super::windows_ghost::install_for_window(window);
 
     let image = match preview_png {
         Some(bytes) => Image::Raw(bytes),

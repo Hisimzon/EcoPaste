@@ -27,6 +27,19 @@ pub async fn toggle_window(app: AppHandle, label: String) -> Result<()> {
 #[tauri::command]
 pub async fn notify_window_ready(app: AppHandle, label: String) {
     window::lifecycle::on_ready(&app, &label);
+
+    #[cfg(target_os = "windows")]
+    if label == window::CLIPBOARD_WINDOW_LABEL {
+        let Ok(clipboard_window) = window::get_window(&app, &label) else {
+            return;
+        };
+
+        if let Err(err) = app.run_on_main_thread(move || {
+            crate::drag_out::prepare_window(&clipboard_window);
+        }) {
+            log::warn!("schedule clipboard drag preparation failed: {err}");
+        }
+    }
 }
 
 /// 标记当前窗口是否存在未保存草稿。相同 owner 可重复设置；所有 owner 清除后才允许销毁。

@@ -21,7 +21,7 @@ import type { ItemActionLabels } from "@/constants/itemActions";
 import type { ClipboardAction, ClipboardItem } from "@/types/clipboard";
 import type { ItemAction } from "@/types/settings";
 import { cn } from "@/utils/cn";
-import { isMac } from "@/utils/is";
+import { isMac, isWin } from "@/utils/is";
 import ClipboardQuickActions from "./ClipboardQuickActions";
 import FilesCard from "./FilesCard";
 import ImageCard from "./ImageCard";
@@ -128,14 +128,15 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
 
   const handleDragStart = async (event: DragEvent) => {
     event.preventDefault();
-    setAutoHideSuspended(true);
+
+    if (!isWin) setAutoHideSuspended(true);
 
     await startDragClipboardItem(item.id);
   };
 
   const handleDragEnd = () => {
     pointerDownPositionRef.current = null;
-    setAutoHideSuspended(false);
+    if (!isWin) setAutoHideSuspended(false);
   };
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -155,12 +156,12 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
 
   const handlePointerUp = () => {
     pointerDownPositionRef.current = null;
-    setAutoHideSuspended(false);
+    if (!isWin) setAutoHideSuspended(false);
   };
 
   const handlePointerCancel = () => {
     pointerDownPositionRef.current = null;
-    setAutoHideSuspended(false);
+    if (!isWin) setAutoHideSuspended(false);
   };
 
   const handleClick = (event: MouseEvent<HTMLDivElement>) => {
@@ -184,6 +185,11 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
 
   const handleCardPointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const start = pointerDownPositionRef.current;
+    if (isWin) {
+      onPointerMove?.(event);
+      return;
+    }
+
     if (start && !autoHideSuspendedRef.current) {
       const movedX = event.clientX - start.x;
       const movedY = event.clientY - start.y;
@@ -204,7 +210,7 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
   };
 
   useUnmount(() => {
-    if (!autoHideSuspendedRef.current) return;
+    if (isWin || !autoHideSuspendedRef.current) return;
 
     void setClipboardWindowAutoHideSuspended(false);
   });

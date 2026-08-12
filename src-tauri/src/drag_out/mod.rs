@@ -32,6 +32,15 @@ pub mod windows;
 #[cfg(target_os = "windows")]
 mod windows_ghost;
 
+/// 在 Windows 剪贴板窗口 ready 后预安装 drag ghost 支持。
+///
+/// 必须早于用户拖拽执行；拖拽手势中重注册 WebView2 的 `IDropTarget` 会取消当前
+/// OLE drag session。调用方负责在 Tauri 主线程执行。
+#[cfg(target_os = "windows")]
+pub(crate) fn prepare_window(window: &WebviewWindow) {
+    windows::prepare_window(window);
+}
+
 /// 启动一次文件类型的 drag-out。
 ///
 /// `preview_png` 是拖拽过程中跟随光标的预览图（PNG 字节）；为 `None` 时

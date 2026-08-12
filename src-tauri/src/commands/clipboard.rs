@@ -195,7 +195,7 @@ pub async fn save_clipboard_image_to_file(
         return Err(AppError::Clipboard("image file does not exist".to_owned()));
     }
 
-    let _auto_hide_guard = ClipboardAutoHideSuspendGuard::new();
+    let _auto_hide_lease = window::suspend_clipboard_window_auto_hide();
     let mut dialog = app
         .dialog()
         .file()
@@ -791,23 +791,6 @@ fn default_saved_image_file_name(item: &ClipboardItem) -> String {
     let local = item.created_at.with_timezone(&Local);
 
     format!("EcoPaste-image-{}.png", local.format("%Y%m%d-%H%M%S"))
-}
-
-/// 保存文件对话框会短暂转移焦点；期间暂停剪贴板窗口失焦/外部点击自动隐藏。
-struct ClipboardAutoHideSuspendGuard;
-
-impl ClipboardAutoHideSuspendGuard {
-    fn new() -> Self {
-        window::set_clipboard_window_auto_hide_suspended(true);
-
-        Self
-    }
-}
-
-impl Drop for ClipboardAutoHideSuspendGuard {
-    fn drop(&mut self) {
-        window::set_clipboard_window_auto_hide_suspended(false);
-    }
 }
 
 /// 为 files 条目按设置组装前若干项 [`FileEntry`]：

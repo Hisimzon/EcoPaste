@@ -1,5 +1,12 @@
 # 更新日志
 
+## [1.1.7](https://github.com/EcoPasteHub/EcoPaste/compare/v1.1.6...v1.1.7) (2026-08-12)
+
+### 🐛 问题修复
+
+- 稳定 Windows 拖出生命周期，并在拖拽完成或取消后恢复窗口自动隐藏。
+- 修复鼠标静止时长距离滚动结束后，卡片快捷操作和 hover 预览不恢复的问题。
+
 ## [1.1.6](https://github.com/EcoPasteHub/EcoPaste/compare/v1.1.5...v1.1.6) (2026-08-11)
 
 ### 🐛 问题修复

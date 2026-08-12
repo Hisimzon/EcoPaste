@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.7](https://github.com/EcoPasteHub/EcoPaste/compare/v1.1.6...v1.1.7) (2026-08-12)
+
+### Bug Fixes
+
+- Stabilized Windows drag-out lifecycle and restored auto-hide after drag completion or cancellation.
+- Restored card quick actions and hover previews under a stationary pointer after user-driven scrolling.
+
 ## [1.1.6](https://github.com/EcoPasteHub/EcoPaste/compare/v1.1.5...v1.1.6) (2026-08-11)
 
 ### Bug Fixes

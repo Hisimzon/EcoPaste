@@ -161,9 +161,14 @@ export function useClipboardPreviewController(
     item: ClipboardItem,
     event: ReactPointerEvent<HTMLDivElement>,
   ) => {
-    if (listScrollingRef.current) return;
+    handleItemPointerEnterAt(item, event.clientY);
+  };
 
-    const pointerY = event.clientY;
+  /**
+   * 按指定指针纵坐标恢复卡片 hover，用于虚拟列表滚动停止后补偿不会重发的 pointerenter。
+   */
+  const handleItemPointerEnterAt = (item: ClipboardItem, pointerY: number) => {
+    if (listScrollingRef.current) return;
 
     onHoverSelect(item.id);
 
@@ -569,6 +574,7 @@ export function useClipboardPreviewController(
   return {
     closePreview,
     handleItemPointerEnter,
+    handleItemPointerEnterAt,
     handleItemPointerLeave,
     handleItemPointerMove,
     handleKeyboardPreviewMove,

@@ -39,7 +39,7 @@ enum DragPayload {
 /// 平台差异（共用）：
 /// - macOS：`beginDraggingSession` 必须主线程；用 `run_on_main_thread` fire-and-forget。
 /// - Windows：`DoDragDrop` 必须在拥有窗口的线程（= Tauri 主线程）跑，否则 `QueryContinueDrag`
-///   立刻 `DRAGDROP_S_CANCEL`；这里用 `run_on_main_thread` + `mpsc` 同步等待。
+///   立刻 `DRAGDROP_S_CANCEL`；这里用 `run_on_main_thread` + oneshot 异步等待。
 #[tauri::command]
 pub async fn start_drag_clipboard_item(
     app: AppHandle,
@@ -48,6 +48,9 @@ pub async fn start_drag_clipboard_item(
     file_icon_store: State<'_, FileIconStore>,
     id: String,
 ) -> Result<()> {
+    #[cfg(target_os = "windows")]
+    let _auto_hide_lease = window::suspend_clipboard_window_auto_hide();
+
     let pool = db.pool().await;
     let item = find_item_by_id(&pool, &id)
         .await?
@@ -73,13 +76,13 @@ pub async fn start_drag_clipboard_item(
 
     #[cfg(target_os = "windows")]
     {
-        let (tx, rx) = std::sync::mpsc::channel();
+        let (tx, rx) = tokio::sync::oneshot::channel();
         app.run_on_main_thread(move || {
             let _ = tx.send(dispatch_drag(&window, payload, preview));
         })
         .map_err(|err| AppError::Clipboard(format!("dispatch to main thread failed: {err}")))?;
 
-        rx.recv()
+        rx.await
             .map_err(|err| AppError::Clipboard(format!("drag result channel closed: {err}")))??;
     }
 

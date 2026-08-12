@@ -18,7 +18,7 @@
 
 use std::ffi::c_void;
 use std::iter::once;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use tauri::WebviewWindow;
 use windows::core::{implement, ComInterface, IUnknown, Interface, PCWSTR};
@@ -29,7 +29,7 @@ use windows::Win32::System::Ole::{
 };
 use windows::Win32::System::SystemServices::MODIFIERKEYS_FLAGS;
 use windows::Win32::UI::Shell::{CLSID_DragDropHelper, IDropTargetHelper};
-use windows::Win32::UI::WindowsAndMessaging::{EnumChildWindows, GetPropW};
+use windows::Win32::UI::WindowsAndMessaging::{EnumChildWindows, GetPropW, IsWindow};
 
 /// Win32 OLE 用这个 prop 名把原始 `IDropTarget` 挂在 HWND 上。
 /// 文档化于多个 MS 内部头文件 / Shell sample，世面上的 drop target wrapper 都依赖这个约定。
@@ -102,18 +102,23 @@ impl IDropTarget_Impl for ForwardingDropTarget {
 
 /// 进程级一次性安装：包装剪贴板窗口及其所有子窗（含 WebView2 内部）注册的 IDropTarget。
 ///
-/// 用 OnceLock 兜底——WebView2 的子窗注册是异步的，所以本函数应该在窗口已显示、
-/// 用户首次触发拖拽时调用，那时 WebView2 已 ready；万一更早调用没有捕到，
-/// 后续靠 [`WRAPPED_TARGETS`] 也能识别重复并补装。
+/// 在前端回报窗口 ready 后调用，此时 WebView2 的子窗和 drop target 已完成初始化。
+/// 不要在 drag session 启动过程中调用：`RevokeDragDrop` 会取消当前拖拽手势。
 static GHOST_INSTALL_RESULT: Mutex<bool> = Mutex::new(false);
 
-/// 记录我们已经包装过的「原始」IDropTarget raw 指针（注意：不是我们的 wrapper 指针）。
-/// 用于幂等：第二次进入 [`install_for_window`] 时若发现某 HWND 当前 prop 指向
-/// 我们包装过的某个 inner，就跳过——避免对自己再包一层。
-static WRAPPED_INNERS: OnceLock<Mutex<Vec<usize>>> = OnceLock::new();
+/// 记录已经注册到 HWND 上的 wrapper raw 指针。
+/// 用于幂等：再次安装时若当前 drop target 已是我们的 wrapper，直接跳过。
+static WRAPPED_TARGETS: OnceLock<Mutex<Vec<(isize, usize)>>> = OnceLock::new();
 
-fn wrapped_inners() -> &'static Mutex<Vec<usize>> {
-    WRAPPED_INNERS.get_or_init(|| Mutex::new(Vec::new()))
+fn wrapped_targets() -> &'static Mutex<Vec<(isize, usize)>> {
+    WRAPPED_TARGETS.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+/// 获取 wrapper 记录锁；即使此前线程 panic，也避免在 Win32 extern 回调中继续 panic。
+fn lock_wrapped_targets() -> MutexGuard<'static, Vec<(isize, usize)>> {
+    wrapped_targets()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// 给指定 Tauri 窗口的整棵 HWND 树安装 ghost drop target 包装。
@@ -127,12 +132,16 @@ pub fn install_for_window(window: &WebviewWindow) {
     let hwnd = HWND(raw_hwnd.0 as isize);
 
     unsafe {
+        lock_wrapped_targets()
+            .retain(|(registered_hwnd, _)| IsWindow(HWND(*registered_hwnd)).as_bool());
         try_wrap_hwnd(hwnd);
         // EnumChildWindows 默认会遍历整棵后代树（不仅是直接子窗）。
         let _ = EnumChildWindows(hwnd, Some(enum_child_proc), LPARAM(0));
     }
 
-    let mut installed = GHOST_INSTALL_RESULT.lock().unwrap();
+    let mut installed = GHOST_INSTALL_RESULT
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     if !*installed {
         *installed = true;
         log::debug!("drag ghost: installed on clipboard window tree");
@@ -147,7 +156,7 @@ extern "system" fn enum_child_proc(hwnd: HWND, _lparam: LPARAM) -> BOOL {
 }
 
 /// 取 HWND 上现存的 IDropTarget，包一层 `ForwardingDropTarget` 重新注册。
-/// 若该 HWND 没注册过 drop target，或 inner 已经是我们的（避免自嵌套），直接跳过。
+/// 若该 HWND 没注册过 drop target，或当前 target 已经是我们的 wrapper，直接跳过。
 unsafe fn try_wrap_hwnd(hwnd: HWND) {
     let prop_w: Vec<u16> = PROP_DROP_TARGET.encode_utf16().chain(once(0)).collect();
     let handle = GetPropW(hwnd, PCWSTR(prop_w.as_ptr()));
@@ -160,10 +169,10 @@ unsafe fn try_wrap_hwnd(hwnd: HWND) {
         return;
     }
 
-    // 已经包装过的 inner 不要再二次包装（每个 inner 只允许出现一次）。
+    // 当前 target 已经是我们的 wrapper 时不要再次套娃包装。
     {
-        let inners = wrapped_inners().lock().unwrap();
-        if inners.contains(&(raw as usize)) {
+        let targets = lock_wrapped_targets();
+        if targets.contains(&(hwnd.0, raw as usize)) {
             return;
         }
     }
@@ -188,23 +197,38 @@ unsafe fn try_wrap_hwnd(hwnd: HWND) {
         };
 
     let wrapper: IDropTarget = ForwardingDropTarget {
-        inner,
+        inner: inner.clone(),
         helper,
         hwnd,
     }
     .into();
+    let wrapper_raw = wrapper.as_raw() as usize;
 
     // 先 Revoke 才能 Register 新目标；Revoke 会 Release 原 inner 一次，但我们前面
     // 通过 cast 已经多 AddRef 了一份，余额仍为 +1，inner 不会被释放。
-    let _ = RevokeDragDrop(hwnd);
+    if let Err(err) = RevokeDragDrop(hwnd) {
+        log::warn!(
+            "drag ghost: RevokeDragDrop on hwnd {:?} failed: {err}",
+            hwnd.0
+        );
+        return;
+    }
     if let Err(err) = RegisterDragDrop(hwnd, &wrapper) {
         log::warn!(
             "drag ghost: RegisterDragDrop on hwnd {:?} failed: {err}",
             hwnd.0
         );
+        if let Err(restore_err) = RegisterDragDrop(hwnd, &inner) {
+            log::error!(
+                "drag ghost: restore IDropTarget on hwnd {:?} failed: {restore_err}",
+                hwnd.0
+            );
+        }
         return;
     }
 
-    wrapped_inners().lock().unwrap().push(raw as usize);
+    let mut targets = lock_wrapped_targets();
+    targets.retain(|(registered_hwnd, _)| *registered_hwnd != hwnd.0);
+    targets.push((hwnd.0, wrapper_raw));
     log::debug!("drag ghost: wrapped IDropTarget on hwnd {:?}", hwnd.0);
 }

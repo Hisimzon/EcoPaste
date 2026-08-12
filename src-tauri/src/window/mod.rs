@@ -12,7 +12,7 @@ pub mod windows;
 pub use macos::handle_reopen;
 pub use state::WindowStateStore;
 
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{LazyLock, Mutex};
 
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window};
@@ -48,6 +48,8 @@ struct PreferenceHighlightPayload {
 static CLIPBOARD_WINDOW_PINNED: AtomicBool = AtomicBool::new(false);
 /// 剪贴板窗口自动隐藏的临时暂停状态，用于系统文件选择等会短暂转移焦点的原生交互。
 static CLIPBOARD_WINDOW_AUTO_HIDE_SUSPENDED: AtomicBool = AtomicBool::new(false);
+/// Rust 原生操作持有的自动隐藏暂停租约数量，支持拖拽、文件对话框等操作安全嵌套。
+static CLIPBOARD_WINDOW_AUTO_HIDE_LEASES: AtomicUsize = AtomicUsize::new(0);
 /// Windows 剪贴板窗口当前的输入模式所有者；只有全部释放后才恢复自动隐藏。
 static CLIPBOARD_WINDOW_EDITING_OWNERS: AtomicU8 = AtomicU8::new(0);
 static CLIPBOARD_WINDOW_EDITING_LOCK: Mutex<()> = Mutex::new(());
@@ -78,6 +80,7 @@ pub fn is_clipboard_window_pinned() -> bool {
 pub fn should_auto_hide_clipboard_window() -> bool {
     !CLIPBOARD_WINDOW_PINNED.load(Ordering::Relaxed)
         && !CLIPBOARD_WINDOW_AUTO_HIDE_SUSPENDED.load(Ordering::Relaxed)
+        && CLIPBOARD_WINDOW_AUTO_HIDE_LEASES.load(Ordering::Relaxed) == 0
         && CLIPBOARD_WINDOW_EDITING_OWNERS.load(Ordering::Relaxed) == 0
 }
 
@@ -103,6 +106,28 @@ pub fn set_clipboard_window_pinned(pinned: bool) {
 /// 临时暂停剪贴板窗口自动隐藏，不改变用户控制的固定态。
 pub fn set_clipboard_window_auto_hide_suspended(suspended: bool) {
     CLIPBOARD_WINDOW_AUTO_HIDE_SUSPENDED.store(suspended, Ordering::Relaxed);
+}
+
+/// Rust 原生操作持有的自动隐藏暂停租约；离开作用域时自动释放。
+pub struct ClipboardWindowAutoHideLease {
+    _private: (),
+}
+
+impl Drop for ClipboardWindowAutoHideLease {
+    fn drop(&mut self) {
+        let released = CLIPBOARD_WINDOW_AUTO_HIDE_LEASES.fetch_update(
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+            |leases| leases.checked_sub(1),
+        );
+        debug_assert!(released.is_ok(), "auto-hide lease counter underflow");
+    }
+}
+
+/// 暂停剪贴板窗口自动隐藏，返回可安全嵌套的作用域租约。
+pub fn suspend_clipboard_window_auto_hide() -> ClipboardWindowAutoHideLease {
+    CLIPBOARD_WINDOW_AUTO_HIDE_LEASES.fetch_add(1, Ordering::Relaxed);
+    ClipboardWindowAutoHideLease { _private: () }
 }
 
 pub fn set_clipboard_window_editing(

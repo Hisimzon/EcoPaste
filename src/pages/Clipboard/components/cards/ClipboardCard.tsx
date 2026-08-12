@@ -70,6 +70,10 @@ interface ClipboardCardProps {
   onQuickAction?: (action: ItemAction) => Promise<void> | void;
   showOriginalOnHover?: boolean;
   rootRef?: Ref<HTMLDivElement>;
+  /**
+   * 滚动停止后的命中结果；未提供时继续使用卡片自身 pointer hover 状态。
+   */
+  recoveredHovered?: boolean;
 }
 
 /**
@@ -101,10 +105,12 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
     onQuickAction,
     showOriginalOnHover = true,
     rootRef,
+    recoveredHovered,
   } = props;
   const { kind, sourceAppId, subKind, sourceAppIconPath, sourceAppName } = item;
   const { t } = useTranslation("clipboard");
   const [hovered, setHovered] = useState(false);
+  const effectiveHovered = recoveredHovered ?? hovered;
   const pointerDownPositionRef = useRef<{ x: number; y: number } | null>(null);
   const autoHideSuspendedRef = useRef(false);
   const typeKey = subKind ?? kind;
@@ -184,6 +190,8 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
   };
 
   const handleCardPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    if (!isListScrolling) setHovered(true);
+
     const start = pointerDownPositionRef.current;
     if (isWin) {
       onPointerMove?.(event);
@@ -261,6 +269,7 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
           "border-ant-primary bg-ant-container": item.isPinned && !isSelected,
         },
       )}
+      data-clipboard-item-id={item.id}
       draggable
       onAuxClick={onAuxClick}
       onClick={handleClick}
@@ -298,14 +307,14 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
           labels={quickActionLabels}
           onQuickAction={onQuickAction}
           quickActions={quickActions}
-          visible={hovered}
+          visible={effectiveHovered}
         />
       </div>
 
       {item.note ? (
         <NoteContentSwitcher
           note={item.note}
-          showOriginal={showOriginalOnHover && hovered}
+          showOriginal={showOriginalOnHover && effectiveHovered}
         >
           {body}
         </NoteContentSwitcher>

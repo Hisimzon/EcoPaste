@@ -5,6 +5,7 @@ import type {
   FC,
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
+  WheelEvent as ReactWheelEvent,
 } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -99,6 +100,9 @@ const List: FC = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
   const [isListScrolling, setIsListScrolling] = useState(false);
+  const [recoveredHoverItemId, setRecoveredHoverItemId] = useState<
+    string | null | undefined
+  >(void 0);
   const [isModifierPressed, setIsModifierPressed] = useState(false);
   const [customGroups, setCustomGroups] = useState<ClipboardGroupRecord[]>([]);
   const [noteTarget, setNoteTarget] = useState<ClipboardItem | null>(null);
@@ -107,6 +111,12 @@ const List: FC = () => {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const isAtTopRef = useRef(true);
   const isListScrollingRef = useRef(false);
+  const listRootRef = useRef<HTMLDivElement>(null);
+  const pointerPositionRef = useRef<{ x: number; y: number } | null>(null);
+  const pointerScrollIntentRef = useRef(false);
+  const pointerScrollIntentFrameRef = useRef<number | null>(null);
+  const scrollbarDraggingRef = useRef(false);
+  const recoverHoverForCurrentScrollRef = useRef(false);
   const pendingFirstVisibleIndexRef = useRef(0);
   const itemElementMapRef = useRef(new Map<string, HTMLDivElement>());
   const closePreviewRef = useRef<(reason: string) => void>(() => {});
@@ -161,6 +171,7 @@ const List: FC = () => {
   const {
     closePreview,
     handleItemPointerEnter,
+    handleItemPointerEnterAt,
     handleItemPointerLeave,
     handleItemPointerMove,
     handleKeyboardPreviewMove,
@@ -821,9 +832,107 @@ const List: FC = () => {
     setIsListScrolling(scrolling);
     handleListScrollingChange(scrolling);
 
-    if (scrolling) return;
+    if (scrolling) {
+      recoverHoverForCurrentScrollRef.current =
+        scrollbarDraggingRef.current || pointerScrollIntentRef.current;
+      pointerScrollIntentRef.current = false;
+      setRecoveredHoverItemId(void 0);
+      return;
+    }
 
     setFirstVisibleIndex(pendingFirstVisibleIndexRef.current);
+    pointerScrollIntentRef.current = false;
+
+    if (!recoverHoverForCurrentScrollRef.current) return;
+
+    recoverHoverForCurrentScrollRef.current = false;
+    window.requestAnimationFrame(recoverHoverAfterScrolling);
+  };
+
+  /**
+   * 滚动停止后按当前指针坐标恢复命中卡片 hover；浏览器不会为静止指针重新派发 pointerenter。
+   */
+  function recoverHoverAfterScrolling() {
+    if (isListScrollingRef.current) return;
+
+    const pointerPosition = pointerPositionRef.current;
+    const listRoot = listRootRef.current;
+    let itemId: string | null = null;
+
+    if (pointerPosition && listRoot) {
+      const target = document.elementFromPoint(
+        pointerPosition.x,
+        pointerPosition.y,
+      );
+      const card = target?.closest<HTMLElement>("[data-clipboard-item-id]");
+
+      if (card && listRoot.contains(card)) {
+        itemId = card.dataset.clipboardItemId ?? null;
+      }
+    }
+
+    setRecoveredHoverItemId(itemId);
+
+    if (!itemId || !pointerPosition) {
+      handleItemPointerLeave();
+      return;
+    }
+
+    const item = findItemById(itemId);
+    if (item) handleItemPointerEnterAt(item, pointerPosition.y);
+  }
+
+  /**
+   * 记录列表内最近的指针坐标；wheel 事件用于覆盖首次进入后直接滚动的场景。
+   */
+  const handleListPointerPosition = (event: {
+    clientX: number;
+    clientY: number;
+  }) => {
+    pointerPositionRef.current = { x: event.clientX, y: event.clientY };
+    setRecoveredHoverItemId(void 0);
+  };
+
+  /**
+   * 标记由 wheel 或滚动条拖动发起的滚动，避免程序化 smooth scroll 抢回键盘选中项。
+   */
+  const handlePointerScrollIntent = () => {
+    pointerScrollIntentRef.current = true;
+    if (isListScrollingRef.current) {
+      recoverHoverForCurrentScrollRef.current = true;
+    }
+
+    if (pointerScrollIntentFrameRef.current !== null) {
+      window.cancelAnimationFrame(pointerScrollIntentFrameRef.current);
+    }
+
+    pointerScrollIntentFrameRef.current = window.requestAnimationFrame(() => {
+      pointerScrollIntentFrameRef.current = null;
+      pointerScrollIntentRef.current = false;
+    });
+  };
+
+  const handleListPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!(event.target instanceof Element)) return;
+    if (!event.target.closest(".os-scrollbar")) return;
+
+    scrollbarDraggingRef.current = true;
+    handlePointerScrollIntent();
+  };
+
+  const handleListPointerUp = () => {
+    scrollbarDraggingRef.current = false;
+  };
+
+  const handleListWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+    handleListPointerPosition(event);
+    handlePointerScrollIntent();
+  };
+
+  const handleListPointerLeave = () => {
+    pointerPositionRef.current = null;
+    setRecoveredHoverItemId(null);
+    handlePreviewAreaPointerLeave();
   };
 
   const handleAtTopStateChange = (atTop: boolean) => {
@@ -887,7 +996,14 @@ const List: FC = () => {
   return (
     <div
       className="relative flex-1 overflow-hidden"
-      onPointerLeave={handlePreviewAreaPointerLeave}
+      onPointerCancel={handleListPointerUp}
+      onPointerDown={handleListPointerDown}
+      onPointerEnter={handleListPointerPosition}
+      onPointerLeave={handleListPointerLeave}
+      onPointerMove={handleListPointerPosition}
+      onPointerUp={handleListPointerUp}
+      onWheel={handleListWheel}
+      ref={listRootRef}
       role="listbox"
     >
       <VirtuosoScroller>{renderVirtuoso}</VirtuosoScroller>
@@ -1141,6 +1257,11 @@ const List: FC = () => {
           onQuickPaste={hintKey ? handleQuickPaste : void 0}
           quickActionLabels={quickActionLabels}
           quickActions={visibleQuickActions}
+          recoveredHovered={
+            recoveredHoverItemId === void 0
+              ? void 0
+              : recoveredHoverItemId === item.id
+          }
           rootRef={registerItemElement(item.id)}
           showOriginalOnHover={showOriginalPreview}
         />

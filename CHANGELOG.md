@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.8](https://github.com/EcoPasteHub/EcoPaste/compare/v1.1.7...v1.1.8) (2026-08-13)
+
+### Bug Fixes
+
+- Restricted Windows clipboard-history takeover to unmodified Win+V while preserving related system shortcuts.
+- Serialized the Win+V hook lifecycle and restored the hook safely after system resume.
+
 ## [1.1.7](https://github.com/EcoPasteHub/EcoPaste/compare/v1.1.6...v1.1.7) (2026-08-12)
 
 ### Bug Fixes

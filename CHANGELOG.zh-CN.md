@@ -1,5 +1,12 @@
 # 更新日志
 
+## [1.1.8](https://github.com/EcoPasteHub/EcoPaste/compare/v1.1.7...v1.1.8) (2026-08-13)
+
+### 🐛 问题修复
+
+- 将 Windows 剪贴板历史接管限制为纯 Win+V，并保留相关系统组合键的原有行为。
+- 串行管理 Win+V hook 生命周期，并在系统唤醒后安全恢复 hook。
+
 ## [1.1.7](https://github.com/EcoPasteHub/EcoPaste/compare/v1.1.6...v1.1.7) (2026-08-12)
 
 ### 🐛 问题修复

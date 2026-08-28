@@ -123,9 +123,7 @@ pub fn set_enabled(app: &AppHandle, enabled: bool) {
         .spawn(move || run_controller(generation))
     {
         let mut controller = CONTROLLER.lock().expect("win_v controller state poisoned");
-        if controller.phase == ControllerPhase::Starting
-            && controller.generation == generation
-        {
+        if controller.phase == ControllerPhase::Starting && controller.generation == generation {
             controller.phase = ControllerPhase::Stopped;
         }
         log::error!("spawn win+v controller thread failed: {err}");
@@ -153,9 +151,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
     }
 
     if !DESIRED_ENABLED.load(Ordering::Acquire) {
-        if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN)
-            && V_CONSUMED.load(Ordering::Relaxed)
-        {
+        if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && V_CONSUMED.load(Ordering::Relaxed) {
             return 1;
         }
 
@@ -235,8 +231,7 @@ fn run_controller(generation: u32) {
         }
 
         let mut hook: HHOOK = null_mut();
-        let mut power_callback: DEVICE_NOTIFY_CALLBACK_ROUTINE =
-            Some(power_notification_callback);
+        let mut power_callback: DEVICE_NOTIFY_CALLBACK_ROUTINE = Some(power_notification_callback);
         let mut power_parameters = DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS {
             Callback: &mut power_callback,
             Context: null_mut(),
@@ -491,6 +486,22 @@ unsafe fn is_key_down(key: i32) -> bool {
     (GetAsyncKeyState(key) as u16) & 0x8000 != 0
 }
 
+/// 钩子线程不能直接操作窗口，回到主线程 toggle 剪贴板窗口。
+fn schedule_toggle() {
+    let Some(app) = APP_HANDLE.get() else {
+        return;
+    };
+
+    let handle = app.clone();
+    if let Err(err) = app.run_on_main_thread(move || {
+        if let Err(err) = window::toggle_window(&handle, CLIPBOARD_WINDOW_LABEL) {
+            log::warn!("toggle clipboard window via win+v failed: {err}");
+        }
+    }) {
+        log::warn!("schedule win+v toggle failed: {err}");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -525,21 +536,5 @@ mod tests {
 
             assert!(!is_pure_win(modifiers));
         }
-    }
-}
-
-/// 钩子线程不能直接操作窗口，回到主线程 toggle 剪贴板窗口。
-fn schedule_toggle() {
-    let Some(app) = APP_HANDLE.get() else {
-        return;
-    };
-
-    let handle = app.clone();
-    if let Err(err) = app.run_on_main_thread(move || {
-        if let Err(err) = window::toggle_window(&handle, CLIPBOARD_WINDOW_LABEL) {
-            log::warn!("toggle clipboard window via win+v failed: {err}");
-        }
-    }) {
-        log::warn!("schedule win+v toggle failed: {err}");
     }
 }

@@ -165,7 +165,7 @@ pub fn set_clipboard_window_editing(
         if result.is_err() {
             CLIPBOARD_WINDOW_EDITING_OWNERS.store(previous, Ordering::Relaxed);
         }
-        return result;
+        result
     }
 
     #[cfg(target_os = "macos")]

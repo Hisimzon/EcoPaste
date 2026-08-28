@@ -238,8 +238,8 @@ pub async fn update_item_note(pool: &SqlitePool, id: &str, note: Option<&str>) -
     .bind(note)
     .bind(id)
     .execute(pool)
-        .await
-        .context("failed to update clipboard item note")?;
+    .await
+    .context("failed to update clipboard item note")?;
     queue_update(pool, id);
     Ok(())
 }
@@ -526,8 +526,7 @@ fn push_filter_clauses(
         KeywordFilter::None => {}
         KeywordFilter::Fts(expr) => {
             let pinyin_keyword = expr
-                .replace('"', "")
-                .replace('*', "")
+                .replace(['"', '*'], "")
                 .split_whitespace()
                 .collect::<String>();
 

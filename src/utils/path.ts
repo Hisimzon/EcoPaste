@@ -1,5 +1,6 @@
 import { getName } from "@tauri-apps/api/app";
-import { appDataDir, sep } from "@tauri-apps/api/path";
+import { appDataDir, resourceDir, sep } from "@tauri-apps/api/path";
+import { exists } from "@tauri-apps/plugin-fs";
 import { last } from "es-toolkit";
 import { globalStore } from "@/stores/global";
 import { isDev } from "./is";
@@ -25,6 +26,24 @@ export function join(...paths: string[]) {
  */
 export const getSaveDataPath = () => {
   return join(globalStore.env.saveDataDir!);
+};
+
+/**
+ * 是否启用免安装便携模式
+ */
+export const isPortableMode = async () => {
+  return exists(join(await resourceDir(), "portable"));
+};
+
+/**
+ * 获取默认存储数据的目录
+ */
+export const getDefaultSaveDataPath = async () => {
+  if (await isPortableMode()) {
+    return join(await resourceDir(), "data");
+  }
+
+  return appDataDir();
 };
 
 /**
@@ -62,7 +81,7 @@ export const getSaveStorePath = async (backup = false) => {
     return join(getSaveDataPath(), `.store-backup.${extname}`);
   }
 
-  return join(await appDataDir(), `.store.${extname}`);
+  return join(await getDefaultSaveDataPath(), `.store.${extname}`);
 };
 
 /**
@@ -71,5 +90,5 @@ export const getSaveStorePath = async (backup = false) => {
 export const getSaveWindowStatePath = async () => {
   const extname = isDev() ? "dev.json" : "json";
 
-  return join(await appDataDir(), `.window-state.${extname}`);
+  return join(await getDefaultSaveDataPath(), `.window-state.${extname}`);
 };

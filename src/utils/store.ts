@@ -1,5 +1,4 @@
 import { getName, getVersion } from "@tauri-apps/api/app";
-import { appDataDir } from "@tauri-apps/api/path";
 import {
   exists,
   mkdir,
@@ -13,7 +12,7 @@ import { clipboardStore } from "@/stores/clipboard";
 import { globalStore } from "@/stores/global";
 import type { Language, Store } from "@/types/store";
 import { deepAssign } from "./object";
-import { getSaveStorePath } from "./path";
+import { getDefaultSaveDataPath, getSaveStorePath } from "./path";
 import { normalizeTextThreshold } from "./threshold";
 
 /**
@@ -24,7 +23,7 @@ const initStore = async () => {
   globalStore.env.platform = platform();
   globalStore.env.appName = await getName();
   globalStore.env.appVersion = await getVersion();
-  globalStore.env.saveDataDir ??= await appDataDir();
+  globalStore.env.saveDataDir ??= await getDefaultSaveDataPath();
 
   // @ts-expect-error
   if (clipboardStore.window.style === "float") {
